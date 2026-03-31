@@ -7,7 +7,12 @@ import {
 } from "@digitalaidseattle/mui";
 
 
-import SamplePage from './extra-pages/SamplePage';
+import SamplePage from './SamplePage';
+import { MembersPage } from "./MembersPage";
+import { ClassesPage } from "./ClassesPage";
+import { EventsPage } from "./EventsPage";
+import { TransactionsPage } from "./TransactionsPage";
+import { ProductsPage } from "./ProductsPage";
 
 const routes = [
   {
@@ -19,8 +24,24 @@ const routes = [
         element: <SamplePage />
       },
       {
-        path: "sample-page",
-        element: <SamplePage />,
+        path: "/members",
+        element: <MembersPage />,
+      },
+      {
+        path: "/classes",
+        element: <ClassesPage />,
+      },
+      {
+        path: "/events",
+        element: <EventsPage />,
+      },
+      {
+        path: "/products",
+        element: <ProductsPage />,
+      },
+      {
+        path: "/transactions",
+        element: <TransactionsPage />,
       },
       {
         path: "privacy",

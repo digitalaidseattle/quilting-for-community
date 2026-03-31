@@ -1,8 +1,12 @@
 
 
 import {
-    ChromeOutlined,
-    DashboardOutlined
+    DashboardOutlined,
+    DollarOutlined,
+    ProductOutlined,
+    RocketOutlined,
+    ScheduleOutlined,
+    TeamOutlined
 } from '@ant-design/icons';
 import logo from "./assets/images/q4c-logo-square.jpg";
 
@@ -31,11 +35,39 @@ export const TemplateConfig = () => {
         type: 'group',
         children: [
             {
-                id: 'sample-page',
-                title: 'Sample Page',
+                id: 'members',
+                title: 'Members',
                 type: 'item',
-                url: '/sample-page',
-                icon: <ChromeOutlined />
+                url: '/members',
+                icon: <TeamOutlined />
+            } as MenuItem,
+            {
+                id: 'classes',
+                title: 'Classes',
+                type: 'item',
+                url: '/classes',
+                icon: <ScheduleOutlined />
+            } as MenuItem,
+            {
+                id: 'events',
+                title: 'Events',
+                type: 'item',
+                url: '/events',
+                icon: <RocketOutlined />
+            } as MenuItem,
+            {
+                id: 'products',
+                title: 'Products',
+                type: 'item',
+                url: '/products',
+                icon: <ProductOutlined />
+            } as MenuItem,
+            {
+                id: 'transactions',
+                title: 'Transactions',
+                type: 'item',
+                url: '/transactions',
+                icon: <DollarOutlined />
             } as MenuItem
         ]
     } as MenuItem;
