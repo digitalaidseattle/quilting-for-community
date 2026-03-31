@@ -4,7 +4,7 @@ import {
     ChromeOutlined,
     DashboardOutlined
 } from '@ant-design/icons';
-import logo from "./assets/images/logo-light-icon.svg";
+import logo from "./assets/images/q4c-logo-square.jpg";
 
 import { MenuItem } from "@digitalaidseattle/mui";
 import Notification from "./Notification";
@@ -41,7 +41,7 @@ export const TemplateConfig = () => {
     } as MenuItem;
 
     return ({
-        appName: 'DAS',
+        appName: import.meta.env.VITE_APPLICATION_NAME,
         logoUrl: logo,
         drawerWidth: 240,
         menuItems: [dashboard, pages],
