@@ -13,11 +13,16 @@ import { ClassesPage } from "./ClassesPage";
 import { EventsPage } from "./EventsPage";
 import { TransactionsPage } from "./TransactionsPage";
 import { ProductsPage } from "./ProductsPage";
+import { AuthGate } from "@digitalaidseattle/core";
 
 const routes = [
   {
     path: "/",
-    element: <MainLayout />,
+    element: (
+      <AuthGate authorizedRoles={["admin"]}>
+        <MainLayout />
+      </AuthGate>
+    ),
     children: [
       {
         path: "",

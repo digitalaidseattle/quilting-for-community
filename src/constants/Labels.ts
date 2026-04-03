@@ -4,5 +4,8 @@ export const Labels = {
     CLASSES: "Classes",
     EVENTS: "Events",
     PRODUCTS: "Products",
-    TRANSACTIONS: "Transactions"
+    TRANSACTIONS: "Transactions",
+
+    NAME: 'Name',
+    EMAIL: 'Email'
 };
