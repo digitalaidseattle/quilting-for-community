@@ -91,6 +91,17 @@ const secondaryColor = "#ef3825"
 
 These two colors was used for DAS Admin Template and should be changed for other projects in addition to change logo and Application name in env file
 
+## Dev Environment Setup
+- create `.env` file and add vars that another dev will provide
+- install [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started?queryGroups=platform&platform=macos) and Docker (required for Supabase to run locally)
+- run `supabase start`
+- run `npm install`
+- run `npm run dev`
+
+When you're done developing:
+- stop the `npm run dev` process in the terminal
+- run `supabase stop`
+
 ## Deployment
 The application is deployed at Google's Firebase as a static website.  GitHub's workflow action adds site secrets to the build before deploying.
 
