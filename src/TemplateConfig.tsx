@@ -1,12 +1,11 @@
 
-
 import {
     DashboardOutlined,
     DollarOutlined,
     ProductOutlined,
     RocketOutlined,
     ScheduleOutlined,
-    TeamOutlined
+    TeamOutlined,
 } from '@ant-design/icons';
 import logo from "./assets/images/q4c-logo-square.jpg";
 
@@ -25,7 +24,7 @@ export const TemplateConfig = () => {
                 type: 'item',
                 url: '/',
                 icon: <DashboardOutlined />
-            }
+            },
         ]
     } as MenuItem;
 
@@ -72,11 +71,26 @@ export const TemplateConfig = () => {
         ]
     } as MenuItem;
 
+    const admin = {
+        id: 'admin',
+        title: 'Admin',
+        type: 'group',
+        children: [
+            {
+                id: 'admin-event-management',
+                title: 'Event Management',
+                type: 'item',
+                url: '/admin/event-management',
+                icon: <ScheduleOutlined />
+            } as MenuItem,
+        ]
+    } as MenuItem;
+
     return ({
         appName: import.meta.env.VITE_APPLICATION_NAME,
         logoUrl: logo,
         drawerWidth: 240,
-        menuItems: [dashboard, pages],
+        menuItems: [dashboard, admin, pages],
         toolbarItems: [
             <Notification key={1} />
         ],
