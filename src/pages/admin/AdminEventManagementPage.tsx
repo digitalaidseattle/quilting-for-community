@@ -19,6 +19,8 @@ import {
     IconButton,
     MenuItem,
     Stack,
+    Tab,
+    Tabs,
     TextField,
     Typography,
 } from "@mui/material";
@@ -30,14 +32,17 @@ import { EventSessionsDao } from "../../services/events/EventSessionsDao";
 import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventSession, SessionStatus } from "../../services/events/types";
 import { formatSessionDate } from "../../utils/date-format";
+import { EventCalendar } from "./EventCalendar";
 
 type EventDialogProps = {
     service: EventsService;
     open: boolean;
     editing: Event;
     templateEvents: Event[];
+    initialSessionId?: string | null;
     onClose: () => void;
     onSaved: () => void;
+    onInitialSessionOpened?: () => void;
 };
 
 const EventDialog = ({
@@ -45,8 +50,10 @@ const EventDialog = ({
     open,
     editing,
     templateEvents,
+    initialSessionId,
     onClose,
     onSaved,
+    onInitialSessionOpened,
 }: EventDialogProps) => {
     const { setLoading } = useContext(LoadingContext);
     const [event, setEvent] = useState<Event>(editing);
@@ -65,6 +72,22 @@ const EventDialog = ({
             setSessions([]);
         }
     }, [editing, open]);
+
+    useEffect(() => {
+        if (!open || !initialSessionId || sessions.length === 0) {
+            return;
+        }
+        const session = sessions.find((s) => s.id === initialSessionId);
+        if (session) {
+            setEditingSession({
+                ...session,
+                start_at: session.start_at.slice(0, 16),
+                end_at: session.end_at.slice(0, 16),
+            });
+            setSessionDialogOpen(true);
+            onInitialSessionOpened?.();
+        }
+    }, [open, initialSessionId, sessions, onInitialSessionOpened]);
 
     function applyTemplate(templateId: string) {
         setSelectedTemplateId(templateId);
@@ -134,6 +157,7 @@ const EventDialog = ({
             }
             setSessionDialogOpen(false);
             setSessions(await service.sessions.getByEventId(event.id as string));
+            onSaved();
         } finally {
             setLoading(false);
         }
@@ -153,6 +177,7 @@ const EventDialog = ({
                 setConfirmDelete(null);
                 setSessionDialogOpen(false);
                 setSessions(await service.sessions.getByEventId(event.id as string));
+                onSaved();
             }
         } finally {
             setLoading(false);
@@ -352,25 +377,42 @@ export const AdminEventManagementPage = () => {
     const { refresh } = useContext(RefreshContext);
 
     const [events, setEvents] = useState<Event[]>([]);
+    const [sessions, setSessions] = useState<EventSession[]>([]);
+    const [tab, setTab] = useState(0);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<Event>(EventsDao.empty());
+    const [initialSessionId, setInitialSessionId] = useState<string | null>(null);
     const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
 
     useEffect(() => { fetchData(); }, [refresh]);
 
     function fetchData() {
         setLoading(true);
-        service.events.getAll()
-            .then(setEvents)
+        Promise.all([
+            service.events.getAll(),
+            service.sessions.getAll(),
+        ])
+            .then(([nextEvents, nextSessions]) => {
+                setEvents(nextEvents);
+                setSessions(nextSessions);
+            })
             .finally(() => setLoading(false));
     }
 
     function openNew() {
+        setInitialSessionId(null);
         setEditing(EventsDao.empty());
         setDialogOpen(true);
     }
 
     function openEdit(event: Event) {
+        setInitialSessionId(null);
+        setEditing({ ...event });
+        setDialogOpen(true);
+    }
+
+    function openSessionFromCalendar(event: Event, session: EventSession) {
+        setInitialSessionId(session.id as string);
         setEditing({ ...event });
         setDialogOpen(true);
     }
@@ -435,23 +477,40 @@ export const AdminEventManagementPage = () => {
             </Breadcrumbs>
 
             <Stack spacing={2}>
-                <Stack direction="row" justifyContent="flex-end">
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Tabs value={tab} onChange={(_, value) => setTab(value)}>
+                        <Tab label="List" />
+                        <Tab label="Calendar" />
+                    </Tabs>
                     <Button variant="contained" startIcon={<PlusOutlined />} onClick={openNew}>
                         New event
                     </Button>
                 </Stack>
-                <Card>
-                    <CardContent>
-                        <DataGrid
-                            rows={events}
-                            columns={columns}
-                            autoHeight
-                            disableRowSelectionOnClick
-                            pageSizeOptions={[10, 25]}
-                            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-                        />
-                    </CardContent>
-                </Card>
+                {tab === 0 && (
+                    <Card>
+                        <CardContent>
+                            <DataGrid
+                                rows={events}
+                                columns={columns}
+                                autoHeight
+                                disableRowSelectionOnClick
+                                pageSizeOptions={[10, 25]}
+                                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                            />
+                        </CardContent>
+                    </Card>
+                )}
+                {tab === 1 && (
+                    <Card>
+                        <CardContent>
+                            <EventCalendar
+                                events={events}
+                                sessions={sessions}
+                                onSessionSelect={openSessionFromCalendar}
+                            />
+                        </CardContent>
+                    </Card>
+                )}
             </Stack>
 
             <EventDialog
@@ -459,8 +518,10 @@ export const AdminEventManagementPage = () => {
                 open={dialogOpen}
                 editing={editing}
                 templateEvents={templateEvents}
+                initialSessionId={initialSessionId}
                 onClose={() => setDialogOpen(false)}
                 onSaved={fetchData}
+                onInitialSessionOpened={() => setInitialSessionId(null)}
             />
 
             <ConfirmationDialog
