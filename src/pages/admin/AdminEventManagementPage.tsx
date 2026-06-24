@@ -1,6 +1,10 @@
 import { useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { HomeOutlined, PlusOutlined } from "@ant-design/icons";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import dayjs from "dayjs";
 import {
     Breadcrumbs,
     Button,
@@ -19,6 +23,7 @@ import {
     Typography,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
+import { ConfirmationDialog } from "@digitalaidseattle/mui";
 import { LoadingContext, RefreshContext } from "@digitalaidseattle/core";
 import { EventsService } from "../../services/events/EventsService";
 import { EventSessionsDao } from "../../services/events/EventSessionsDao";
@@ -49,6 +54,7 @@ const EventDialog = ({
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
     const [editingSession, setEditingSession] = useState<EventSession>(EventSessionsDao.empty());
+    const [confirmDelete, setConfirmDelete] = useState<{ type: 'event' } | { type: 'session', session: EventSession } | null>(null);
 
     useEffect(() => {
         setEvent(editing);
@@ -133,6 +139,26 @@ const EventDialog = ({
         }
     }
 
+    async function handleConfirmDelete() {
+        if (!confirmDelete || !event.id) return;
+        setLoading(true);
+        try {
+            if (confirmDelete.type === 'event') {
+                await service.events.delete(event.id);
+                setConfirmDelete(null);
+                onSaved();
+                onClose();
+            } else if (confirmDelete.session.id) {
+                await service.sessions.delete(confirmDelete.session.id);
+                setConfirmDelete(null);
+                setSessionDialogOpen(false);
+                setSessions(await service.sessions.getByEventId(event.id as string));
+            }
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const sessionColumns = [
         {
             field: 'start_at',
@@ -150,10 +176,13 @@ const EventDialog = ({
         {
             field: 'actions',
             headerName: '',
-            width: 80,
+            width: 130,
             sortable: false,
             renderCell: (params: { row: EventSession }) => (
-                <Button size="small" onClick={() => openEditSession(params.row)}>Edit</Button>
+                <Stack direction="row" spacing={1}>
+                    <Button size="small" onClick={() => openEditSession(params.row)}>Edit</Button>
+                    <Button size="small" color="error" onClick={() => setConfirmDelete({ type: 'session', session: params.row })}>Delete</Button>
+                </Stack>
             ),
         },
     ];
@@ -182,12 +211,16 @@ const EventDialog = ({
                         <TextField label="Description" value={event.description} onChange={(e) => setEvent({ ...event, description: e.target.value })} multiline rows={3} fullWidth />
                         <TextField label="Notes" value={event.notes} onChange={(e) => setEvent({ ...event, notes: e.target.value })} multiline rows={2} fullWidth />
                         <TextField label="Category" value={event.category} onChange={(e) => setEvent({ ...event, category: e.target.value })} fullWidth />
-                        <TextField label="Duration (minutes)" type="number" value={event.duration} onChange={(e) => setEvent({ ...event, duration: Number(e.target.value) })} fullWidth />
-                        <TextField label="Max seats" type="number" value={event.max_seats} onChange={(e) => setEvent({ ...event, max_seats: Number(e.target.value) })} fullWidth />
-                        <TextField label="Volunteer seats" type="number" value={event.volunteer_seat_count} onChange={(e) => setEvent({ ...event, volunteer_seat_count: Number(e.target.value) })} fullWidth />
-                        <TextField label="Price min" type="number" value={event.price_min} onChange={(e) => setEvent({ ...event, price_min: Number(e.target.value) })} fullWidth />
-                        <TextField label="Price" type="number" value={event.price} onChange={(e) => setEvent({ ...event, price: Number(e.target.value) })} fullWidth />
-                        <TextField label="Price max" type="number" value={event.price_max} onChange={(e) => setEvent({ ...event, price_max: Number(e.target.value) })} fullWidth />
+                        <Stack direction="row" spacing={2}>
+                            <TextField label="Duration (minutes)" type="number" value={event.duration} onChange={(e) => setEvent({ ...event, duration: Number(e.target.value) })} sx={{ flex: 1 }} />
+                            <TextField label="Max seats" type="number" value={event.max_seats} onChange={(e) => setEvent({ ...event, max_seats: Number(e.target.value) })} sx={{ flex: 1 }} />
+                            <TextField label="Volunteer seats" type="number" value={event.volunteer_seat_count} onChange={(e) => setEvent({ ...event, volunteer_seat_count: Number(e.target.value) })} sx={{ flex: 1 }} />
+                        </Stack>
+                        <Stack direction="row" spacing={2}>
+                            <TextField label="Price min" type="number" value={event.price_min} onChange={(e) => setEvent({ ...event, price_min: Number(e.target.value) })} sx={{ flex: 1 }} />
+                            <TextField label="Price" type="number" value={event.price} onChange={(e) => setEvent({ ...event, price: Number(e.target.value) })} sx={{ flex: 1 }} />
+                            <TextField label="Price max" type="number" value={event.price_max} onChange={(e) => setEvent({ ...event, price_max: Number(e.target.value) })} sx={{ flex: 1 }} />
+                        </Stack>
                         <FormControlLabel
                             control={
                                 <Checkbox
@@ -228,27 +261,87 @@ const EventDialog = ({
             <Dialog open={sessionDialogOpen} onClose={() => setSessionDialogOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>{editingSession.id ? 'Edit session' : 'New session'}</DialogTitle>
                 <DialogContent>
-                    <Stack spacing={2} sx={{ mt: 1 }}>
-                        <TextField label="Start" type="datetime-local" value={editingSession.start_at} onChange={(e) => setEditingSession({ ...editingSession, start_at: e.target.value })} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
-                        <TextField label="End" type="datetime-local" value={editingSession.end_at} onChange={(e) => setEditingSession({ ...editingSession, end_at: e.target.value })} fullWidth slotProps={{ inputLabel: { shrink: true } }} />
-                        <TextField
-                            select
-                            label="Status"
-                            value={editingSession.status}
-                            onChange={(e) => setEditingSession({ ...editingSession, status: e.target.value as SessionStatus })}
-                            fullWidth
-                        >
-                            <MenuItem value="draft">Draft</MenuItem>
-                            <MenuItem value="published">Published</MenuItem>
-                            <MenuItem value="cancelled">Cancelled</MenuItem>
-                        </TextField>
-                    </Stack>
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                        <Stack spacing={2} sx={{ mt: 1 }}>
+                            <DateTimePicker
+                                label="Start"
+                                value={editingSession.start_at ? dayjs(editingSession.start_at) : null}
+                                onChange={(value) => setEditingSession({
+                                    ...editingSession,
+                                    start_at: value?.format('YYYY-MM-DDTHH:mm') ?? '',
+                                })}
+                                slotProps={{ textField: { fullWidth: true } }}
+                            />
+                            <DateTimePicker
+                                label="End"
+                                value={editingSession.end_at ? dayjs(editingSession.end_at) : null}
+                                onChange={(value) => setEditingSession({
+                                    ...editingSession,
+                                    end_at: value?.format('YYYY-MM-DDTHH:mm') ?? '',
+                                })}
+                                slotProps={{ textField: { fullWidth: true } }}
+                            />
+                            <TextField
+                                select
+                                label="Status"
+                                value={editingSession.status}
+                                onChange={(e) => setEditingSession({ ...editingSession, status: e.target.value as SessionStatus })}
+                                fullWidth
+                            >
+                                <MenuItem value="draft">Draft</MenuItem>
+                                <MenuItem value="published">Published</MenuItem>
+                                <MenuItem value="cancelled">Cancelled</MenuItem>
+                            </TextField>
+                            <FormControlLabel
+                                control={
+                                    <Checkbox
+                                        checked={editingSession.max_seats != null}
+                                        onChange={(e) => setEditingSession({
+                                            ...editingSession,
+                                            max_seats: e.target.checked ? event.max_seats : null,
+                                        })}
+                                    />
+                                }
+                                label={`Override max seats (event default: ${event.max_seats})`}
+                            />
+                            {editingSession.max_seats != null && (
+                                <TextField
+                                    label="Max seats"
+                                    type="number"
+                                    value={editingSession.max_seats}
+                                    onChange={(e) => setEditingSession({ ...editingSession, max_seats: Number(e.target.value) })}
+                                    fullWidth
+                                />
+                            )}
+                        </Stack>
+                    </LocalizationProvider>
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setSessionDialogOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={handleSaveSession}>Save session</Button>
+                <DialogActions sx={{ justifyContent: 'space-between' }}>
+                    {editingSession.id ? (
+                        <Button color="error" onClick={() => setConfirmDelete({ type: 'session', session: editingSession })}>Delete session</Button>
+                    ) : (
+                        <span />
+                    )}
+                    <Stack direction="row" spacing={1}>
+                        <Button onClick={() => setSessionDialogOpen(false)}>Cancel</Button>
+                        <Button variant="contained" onClick={handleSaveSession}>Save session</Button>
+                    </Stack>
                 </DialogActions>
             </Dialog>
+
+            <ConfirmationDialog
+                open={confirmDelete != null}
+                title={confirmDelete?.type === 'event' ? 'Delete event' : 'Delete session'}
+                message={
+                    confirmDelete?.type === 'event'
+                        ? `Delete "${event.name}" and all of its sessions? This cannot be undone.`
+                        : confirmDelete?.type === 'session'
+                            ? `Delete this session starting ${formatSessionDate(confirmDelete.session.start_at)}? This cannot be undone.`
+                            : ''
+                }
+                handleConfirm={handleConfirmDelete}
+                handleCancel={() => setConfirmDelete(null)}
+            />
         </>
     );
 };
@@ -261,6 +354,7 @@ export const AdminEventManagementPage = () => {
     const [events, setEvents] = useState<Event[]>([]);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<Event>(EventsDao.empty());
+    const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
 
     useEffect(() => { fetchData(); }, [refresh]);
 
@@ -291,6 +385,21 @@ export const AdminEventManagementPage = () => {
         }
     }
 
+    async function handleConfirmDeleteEvent() {
+        if (!eventToDelete?.id) return;
+        setLoading(true);
+        try {
+            await service.events.delete(eventToDelete.id);
+            setEventToDelete(null);
+            if (dialogOpen && editing.id === eventToDelete.id) {
+                setDialogOpen(false);
+            }
+            fetchData();
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const templateEvents = events.filter((e) => e.template);
 
     const columns = [
@@ -306,12 +415,13 @@ export const AdminEventManagementPage = () => {
         {
             field: 'actions',
             headerName: 'Actions',
-            width: 180,
+            width: 230,
             sortable: false,
             renderCell: (params: { row: Event }) => (
                 <Stack direction="row" spacing={1}>
                     <Button size="small" onClick={() => openEdit(params.row)}>Edit</Button>
                     <Button size="small" onClick={() => handleClone(params.row)}>Clone</Button>
+                    <Button size="small" color="error" onClick={() => setEventToDelete(params.row)}>Delete</Button>
                 </Stack>
             ),
         },
@@ -351,6 +461,14 @@ export const AdminEventManagementPage = () => {
                 templateEvents={templateEvents}
                 onClose={() => setDialogOpen(false)}
                 onSaved={fetchData}
+            />
+
+            <ConfirmationDialog
+                open={eventToDelete != null}
+                title="Delete event"
+                message={`Delete "${eventToDelete?.name ?? ''}" and all of its sessions? This cannot be undone.`}
+                handleConfirm={handleConfirmDeleteEvent}
+                handleCancel={() => setEventToDelete(null)}
             />
         </>
     );

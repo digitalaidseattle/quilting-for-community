@@ -20,13 +20,14 @@ values (
   true
 ) on conflict (id) do nothing;
 
-insert into public.event_sessions (id, event_id, start_at, end_at, status)
+insert into public.event_sessions (id, event_id, start_at, end_at, max_seats, status)
 values
   (
     'c0000000-0000-4000-8000-000000000001',
     'b0000000-0000-4000-8000-000000000001',
     (date_trunc('week', now()) + interval '10 days' + interval '10 hours'),
     (date_trunc('week', now()) + interval '10 days' + interval '12 hours'),
+    null,
     'published'
   ),
   (
@@ -34,6 +35,7 @@ values
     'b0000000-0000-4000-8000-000000000001',
     (date_trunc('week', now()) + interval '17 days' + interval '10 hours'),
     (date_trunc('week', now()) + interval '17 days' + interval '12 hours'),
+    8,
     'draft'
   )
 on conflict (id) do nothing;

@@ -24,11 +24,13 @@ create index events_template_idx on public.events(template);
 create index events_category_idx on public.events(category);
 
 -- Scheduled parts of an event (e.g. week 1, week 2 of a multi-week class).
+-- max_seats null inherits from the parent event; set explicitly to override.
 create table public.event_sessions (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events(id) on delete cascade,
   start_at timestamptz not null,
   end_at timestamptz not null,
+  max_seats int,
   status text not null default 'draft' check (status in ('draft', 'published', 'cancelled')),
   created_at timestamptz default now(),
   updated_at timestamptz default now()

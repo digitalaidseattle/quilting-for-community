@@ -56,6 +56,7 @@ export class EventsService {
             event_id: event.id as string,
             start_at: start,
             end_at: end,
+            max_seats: overrides.max_seats ?? null,
             status: overrides.status ?? 'draft',
         } as EventSession;
     }
