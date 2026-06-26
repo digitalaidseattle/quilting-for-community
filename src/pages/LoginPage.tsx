@@ -51,6 +51,14 @@ const LoginPage: React.FC = () => {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    authService.getUser().then((user) => {
+      if (user && authService.isAuthorized(user, ['admin'])) {
+        navigate('/');
+      }
+    });
+  }, []);
+
   const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage('');
