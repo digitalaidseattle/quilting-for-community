@@ -1,6 +1,5 @@
 import {
   Error,
-  Login,
   MainLayout,
   MarkdownPage,
   MinimalLayout
@@ -8,6 +7,7 @@ import {
 
 
 import SamplePage from './SamplePage';
+import LoginPage from './LoginPage';
 import { MembersPage } from "./MembersPage";
 import { ClassesPage } from "./ClassesPage";
 import { EventsPage } from "./EventsPage";
@@ -60,7 +60,7 @@ const routes = [
     children: [
       {
         path: 'login',
-        element: <Login />
+        element: <LoginPage />
       }
     ]
   },
