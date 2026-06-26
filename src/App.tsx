@@ -16,13 +16,13 @@ import {
 } from "@digitalaidseattle/core";
 import { LayoutConfigurationProvider } from "@digitalaidseattle/mui";
 import {
-  SupabaseAuthService,
   SupabaseConfiguration,
   SupabaseStorageService
 } from '@digitalaidseattle/supabase';
 
 import "./App.css";
 import { routes } from './pages/routes';
+import { Q4CAuthService } from './services/Q4CAuthService';
 import { TemplateConfig } from './TemplateConfig';
 
 // ==============================|| APP - THEME, ROUTER, LOCAL  ||============================== //
@@ -44,14 +44,14 @@ const App: React.FC = () => {
     });
 
     setCoreServices({
-      authService: SupabaseAuthService.getInstance(),
+      authService: Q4CAuthService.getInstance(),
       storageService: SupabaseStorageService.getInstance()
     })
     setInitialized(true);
   }
 
   return (initialized &&
-    <AuthServiceProvider authService={SupabaseAuthService.getInstance()} >
+    <AuthServiceProvider authService={Q4CAuthService.getInstance()} >
       <StorageServiceProvider storageService={SupabaseStorageService.getInstance()} >
         <UserContextProvider>
           <LayoutConfigurationProvider configuration={TemplateConfig()}>
