@@ -37,6 +37,8 @@ alter table public.profiles
   alter column updated_at set default now(),
   alter column updated_at set not null;
 
+alter table public.profiles enable row level security;
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -50,6 +52,7 @@ begin
     name,
     first_name,
     last_name,
+    roles,
     created_by,
     updated_by
   )
@@ -63,6 +66,15 @@ begin
     ),
     nullif(new.raw_user_meta_data->>'first_name', ''),
     nullif(new.raw_user_meta_data->>'last_name', ''),
+    array(
+      select jsonb_array_elements_text(
+        case
+          when jsonb_typeof(coalesce(new.raw_user_meta_data, '{}'::jsonb)->'roles') = 'array'
+            then coalesce(new.raw_user_meta_data, '{}'::jsonb)->'roles'
+          else '[]'::jsonb
+        end
+      )
+    ),
     new.email,
     new.email
   )
@@ -72,6 +84,12 @@ begin
     name = coalesce(public.profiles.name, excluded.name),
     first_name = coalesce(public.profiles.first_name, excluded.first_name),
     last_name = coalesce(public.profiles.last_name, excluded.last_name),
+    roles = case
+      when coalesce(new.raw_user_meta_data, '{}'::jsonb) ? 'roles'
+        and jsonb_typeof(new.raw_user_meta_data->'roles') = 'array'
+        then excluded.roles
+      else public.profiles.roles
+    end,
     updated_at = now(),
     updated_by = excluded.updated_by;
 
@@ -79,10 +97,34 @@ begin
 end;
 $$;
 
+create or replace function public.set_profile_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_set_updated_at on public.profiles;
+
+create trigger profiles_set_updated_at
+before update on public.profiles
+for each row
+execute function public.set_profile_updated_at();
+
 drop trigger if exists on_auth_user_created on auth.users;
+drop trigger if exists on_auth_user_updated on auth.users;
 
 create trigger on_auth_user_created
 after insert on auth.users
+for each row
+execute function public.handle_new_user();
+
+create trigger on_auth_user_updated
+after update of email, raw_user_meta_data on auth.users
 for each row
 execute function public.handle_new_user();
 

@@ -12,3 +12,5 @@ create table public.profiles (
   updated_at timestamptz not null default now(),
   updated_by text
 );
+
+alter table public.profiles enable row level security;
