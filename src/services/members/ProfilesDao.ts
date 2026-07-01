@@ -15,6 +15,7 @@ export type Profile = Entity & {
     email: string;
     phone: string;
     roles: string[];
+    waiver_accepted: boolean;
 }
 
 const DEFAULT_SELECT = '*';
