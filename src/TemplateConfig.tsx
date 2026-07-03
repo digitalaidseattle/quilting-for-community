@@ -3,7 +3,6 @@ import {
     DashboardOutlined,
     DollarOutlined,
     ProductOutlined,
-    RocketOutlined,
     ScheduleOutlined,
     TeamOutlined,
 } from '@ant-design/icons';
@@ -51,8 +50,8 @@ export const TemplateConfig = () => {
                 id: 'events',
                 title: 'Events',
                 type: 'item',
-                url: '/events',
-                icon: <RocketOutlined />
+                url: '/admin/event-management',
+                icon: <ScheduleOutlined />
             } as MenuItem,
             {
                 id: 'products',
@@ -71,26 +70,11 @@ export const TemplateConfig = () => {
         ]
     } as MenuItem;
 
-    const admin = {
-        id: 'admin',
-        title: 'Admin',
-        type: 'group',
-        children: [
-            {
-                id: 'admin-event-management',
-                title: 'Event Management',
-                type: 'item',
-                url: '/admin/event-management',
-                icon: <ScheduleOutlined />
-            } as MenuItem,
-        ]
-    } as MenuItem;
-
     return ({
         appName: import.meta.env.VITE_APPLICATION_NAME,
         logoUrl: logo,
         drawerWidth: 240,
-        menuItems: [dashboard, admin, pages],
+        menuItems: [dashboard, pages],
         toolbarItems: [
             <Notification key={1} />
         ],

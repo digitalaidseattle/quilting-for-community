@@ -26,7 +26,7 @@ export class EventsService {
         if (!source) {
             throw new Error(`Event not found: ${id}`);
         }
-        const { id: _id, created_at, updated_at, ...rest } = source;
+        const { id: _id, created_at, updated_at, event_sessions, ...rest } = source;
         const cloned = await this.events.insert({
             ...rest,
             ...overrides,

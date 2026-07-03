@@ -17,7 +17,9 @@ create table public.events (
   price_max numeric(10,2) not null default 0,
   template boolean not null default false,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  created_by text,
+  updated_at timestamptz default now(),
+  updated_by text
 );
 
 create index events_template_idx on public.events(template);
@@ -31,14 +33,44 @@ create table public.event_sessions (
   start_at timestamptz not null,
   end_at timestamptz not null,
   max_seats int,
-  status text not null default 'draft' check (status in ('draft', 'published', 'cancelled')),
+  status text not null default 'draft',
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  created_by text,
+  updated_at timestamptz default now(),
+  updated_by text
 );
 
 create index event_sessions_event_id_idx on public.event_sessions(event_id);
 create index event_sessions_start_at_idx on public.event_sessions(start_at);
 create index event_sessions_status_idx on public.event_sessions(status);
+
+-- ---------------------------------------------------------------------------
+-- Audit columns
+-- ---------------------------------------------------------------------------
+
+-- Set created_*/updated_* server-side so clients can't forget them
+create or replace function public.set_audit_fields()
+returns trigger language plpgsql as $$
+declare
+  actor text := coalesce(auth.jwt() ->> 'email', auth.uid()::text);
+begin
+  if tg_op = 'INSERT' then
+    new.created_at := now();
+    new.created_by := actor;
+  end if;
+  new.updated_at := now();
+  new.updated_by := actor;
+  return new;
+end;
+$$;
+
+create trigger events_set_audit_fields
+  before insert or update on public.events
+  for each row execute function public.set_audit_fields();
+
+create trigger event_sessions_set_audit_fields
+  before insert or update on public.event_sessions
+  for each row execute function public.set_audit_fields();
 
 -- ---------------------------------------------------------------------------
 -- Auth helpers

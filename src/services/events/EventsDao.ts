@@ -24,7 +24,8 @@ export class EventsDao extends SupabaseDAO<Event> {
         if (!EventsDao.instance) {
             EventsDao.instance = new EventsDao(
                 SupabaseConfiguration.getInstance().getSupabaseClient(),
-                'events'
+                'events',
+                { select: '*, event_sessions(*)' }
             );
         }
         return EventsDao.instance;

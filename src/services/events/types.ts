@@ -14,6 +14,7 @@ export type Event = Entity & {
     price: number;
     price_max: number;
     template: boolean;
+    event_sessions?: EventSession[];
 };
 
 export type EventSession = Entity & {
