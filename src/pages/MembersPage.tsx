@@ -3,15 +3,13 @@
  * 
  * @copyright 2026 Digital Aid Seattle
 */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { HomeOutlined } from "@ant-design/icons";
 import { Breadcrumbs, Card, CardContent, IconButton, Stack, Typography } from '@mui/material';
 import {
   DataGrid,
-  GridColDef,
-  GridRowParams,
   GridSortModel,
   useGridApiRef
 } from '@mui/x-data-grid';
@@ -25,9 +23,9 @@ import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
 
 // ==============================|| SAMPLE PAGE ||============================== //
 
-const profilesDao = ProfilesDao.getInstance();
-
 export const MembersPage = () => {
+  const profilesDao = ProfilesDao.getInstance();
+
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
@@ -36,7 +34,11 @@ export const MembersPage = () => {
   const { refresh } = useContext(RefreshContext);
   const navigate = useNavigate();
 
-  const columns: GridColDef<Profile>[] = [
+  useEffect(() => {
+    fetchData();
+  }, [paginationModel, sortModel, refresh])
+
+  const columns = [
     {
       field: 'name',
       headerName: Labels.NAME,
@@ -49,7 +51,7 @@ export const MembersPage = () => {
     }
   ];
 
-  const fetchData = useCallback(() => {
+  function fetchData() {
     if (paginationModel && sortModel) {
       const queryModel = {
         page: paginationModel.page,
@@ -64,13 +66,9 @@ export const MembersPage = () => {
         .finally(() => setLoading(false))
     }
 
-  }, [paginationModel, setLoading, sortModel]);
+  }
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData, refresh])
-
-  function handleRowClick(params: GridRowParams<Profile>): void {
+  function handleRowClick(params: any, _event: any, _details: any): void {
     navigate(`/profile/${params.row.id}`)
   }
 

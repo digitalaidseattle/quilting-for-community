@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, useState } from 'react';
+import { useRef, useState } from 'react';
 
 // material-ui
 import {
@@ -49,15 +49,16 @@ const Notification = () => {
   const theme = useTheme();
   const matchesXs = useMediaQuery(theme.breakpoints.down('md'));
 
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
-  const handleToggle = (event: ReactMouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const handleToggle = () => {
     setOpen((prevOpen) => !prevOpen);
   };
 
   const handleClose = (event: MouseEvent | TouchEvent) => {
-    if (anchorEl && anchorEl.contains(event.target as Node)) {
+    // REVIEW this casting works, but ugh
+    const ref = anchorRef as unknown as Record<string, HTMLElement>;
+    if (ref.current && ref.current === event.target) {
       return;
     }
     setOpen(false);
@@ -73,6 +74,7 @@ const Notification = () => {
         color="secondary"
         sx={{ color: 'text.primary', bgcolor: open ? iconBackColorOpen : iconBackColor }}
         aria-label="open profile"
+        ref={anchorRef}
         aria-controls={open ? 'profile-grow' : undefined}
         aria-haspopup="true"
         onClick={handleToggle}
@@ -84,7 +86,7 @@ const Notification = () => {
       <Popper
         placement={matchesXs ? 'bottom' : 'bottom-end'}
         open={open}
-        anchorEl={anchorEl}
+        anchorEl={anchorRef.current}
         role={undefined}
         transition
         disablePortal
@@ -119,7 +121,7 @@ const Notification = () => {
                   border={false}
                   content={false}
                   secondary={
-                    <IconButton size="small" onClick={() => setOpen(false)}>
+                    <IconButton size="small" onClick={handleToggle}>
                       <CloseOutlined />
                     </IconButton>
                   }

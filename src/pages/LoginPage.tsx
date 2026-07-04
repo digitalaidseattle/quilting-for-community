@@ -57,7 +57,7 @@ const LoginPage: React.FC = () => {
         navigate('/');
       }
     });
-  }, [authService, navigate]);
+  }, []);
 
   const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
