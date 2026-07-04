@@ -3,7 +3,7 @@
  * 
  * @copyright 2026 Digital Aid Seattle
 */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { HomeOutlined } from "@ant-design/icons";
@@ -25,9 +25,8 @@ import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
 
 // ==============================|| SAMPLE PAGE ||============================== //
 
-const profilesDao = ProfilesDao.getInstance();
-
 export const MembersPage = () => {
+  const profilesDao = useMemo(() => ProfilesDao.getInstance(), []);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
@@ -64,7 +63,7 @@ export const MembersPage = () => {
         .finally(() => setLoading(false))
     }
 
-  }, [paginationModel, setLoading, sortModel]);
+  }, [paginationModel, profilesDao, setLoading, sortModel]);
 
   useEffect(() => {
     fetchData();

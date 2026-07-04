@@ -87,7 +87,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <Container id="cont" sx={{ width: "33%", get: 2 }}>
+    <Container id="cont" maxWidth="sm" sx={{ width: { xs: '100%', sm: '75%', md: '33%' } }}>
       <Card id="card" sx={{ gap: 2 }}>
         <CardContent sx={{ textAlign: 'center', alignItems: 'center' }}>
           {(errorMessage !== '') &&
