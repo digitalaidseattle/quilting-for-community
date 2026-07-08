@@ -3,14 +3,13 @@
  * 
  * @copyright 2026 Digital Aid Seattle
 */
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { HomeOutlined } from "@ant-design/icons";
 import { Breadcrumbs, Card, CardContent, IconButton, Stack, Typography } from '@mui/material';
 import {
   DataGrid,
-  GridColDef,
   GridRowParams,
   GridSortModel,
   useGridApiRef
@@ -26,7 +25,7 @@ import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
 // ==============================|| SAMPLE PAGE ||============================== //
 
 export const MembersPage = () => {
-  const profilesDao = useMemo(() => ProfilesDao.getInstance(), []);
+  const profilesDao = ProfilesDao.getInstance();
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
@@ -35,7 +34,7 @@ export const MembersPage = () => {
   const { refresh } = useContext(RefreshContext);
   const navigate = useNavigate();
 
-  const columns: GridColDef<Profile>[] = [
+  const columns = [
     {
       field: 'name',
       headerName: Labels.NAME,
