@@ -12,38 +12,99 @@ import {
     Tabs,
     Typography,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
+import { DataGrid, GridSortModel } from "@mui/x-data-grid";
+import dayjs from "dayjs";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
-import { LoadingContext, RefreshContext } from "@digitalaidseattle/core";
+import { LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
+import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { EventsService } from "../../services/events/EventsService";
 import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventSession } from "../../services/events/types";
-import { EventCalendar } from "./EventCalendar";
+import { CalendarRange, EventCalendar } from "./EventCalendar";
 import { EventDialog } from "./EventDialog";
+
+const TEMPLATES_QUERY: QueryModel = {
+    page: 0,
+    pageSize: 100,
+    sortField: 'name',
+    sortDirection: 'asc',
+    filterModel: { items: [{ field: 'template', operator: 'equals', value: true }] },
+};
+
+// Month view can show up to a week of adjacent months on either side.
+const initialCalendarRange = (): CalendarRange => ({
+    start: dayjs().startOf('month').subtract(7, 'day').toDate(),
+    end: dayjs().endOf('month').add(7, 'day').toDate(),
+});
 
 export const AdminEventManagementPage = () => {
     const service = EventsService.getInstance();
     const { setLoading } = useContext(LoadingContext);
     const { refresh } = useContext(RefreshContext);
 
-    const [events, setEvents] = useState<Event[]>([]);
-    const [sessions, setSessions] = useState<EventSession[]>([]);
+    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
+    const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'name', sort: 'asc' }]);
+    const [pageInfo, setPageInfo] = useState<PageInfo<Event>>({ rows: [], totalRowCount: 0 });
+    const [templateEvents, setTemplateEvents] = useState<Event[]>([]);
+    const [calendarRange, setCalendarRange] = useState<CalendarRange>(initialCalendarRange);
+    const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
+    const [version, setVersion] = useState(0);
     const [tab, setTab] = useState(0);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<Event>(EventsDao.empty());
     const [initialSessionId, setInitialSessionId] = useState<string | null>(null);
     const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
 
-    useEffect(() => { fetchData(); }, [refresh]);
+    useEffect(() => { fetchPage(); }, [paginationModel, sortModel, refresh, version]);
 
-    function fetchData() {
+    useEffect(() => {
+        service.find(TEMPLATES_QUERY, { select: '*' }).then((page) => setTemplateEvents(page.rows));
+    }, [refresh, version]);
+
+    useEffect(() => {
+        if (tab === 1) {
+            fetchCalendarEvents();
+        }
+    }, [tab, calendarRange, refresh, version]);
+
+    function fetchPage() {
+        const queryModel = {
+            page: paginationModel.page,
+            pageSize: paginationModel.pageSize,
+            sortField: sortModel.length === 0 ? 'name' : sortModel[0].field,
+            sortDirection: sortModel.length === 0 ? 'asc' : sortModel[0].sort,
+        } as QueryModel;
+
         setLoading(true);
-        service.events.getAll()
-            .then((nextEvents) => {
-                setEvents(nextEvents);
-                setSessions(nextEvents.flatMap((event) => event.event_sessions ?? []));
-            })
+        service.find(queryModel, { select: '*' })
+            .then(setPageInfo)
             .finally(() => setLoading(false));
+    }
+
+    function fetchCalendarEvents() {
+        const queryModel = {
+            page: 0,
+            pageSize: 200,
+            sortField: 'name',
+            sortDirection: 'asc',
+            filterModel: {
+                items: [
+                    { field: 'event_sessions.start_at', operator: '>', value: calendarRange.start.toISOString() },
+                    { field: 'event_sessions.start_at', operator: '<', value: calendarRange.end.toISOString() },
+                ],
+            },
+        } as QueryModel;
+
+        setLoading(true);
+        // The !inner join drops events with no sessions in range, and the
+        // dotted filters restrict the embedded sessions to the range.
+        service.find(queryModel, { select: '*, event_sessions!inner(*)' })
+            .then((page) => setCalendarEvents(page.rows))
+            .finally(() => setLoading(false));
+    }
+
+    function refetch() {
+        setVersion((v) => v + 1);
     }
 
     function openNew() {
@@ -68,7 +129,7 @@ export const AdminEventManagementPage = () => {
         setLoading(true);
         try {
             await service.cloneEvent(event.id as string);
-            fetchData();
+            refetch();
         } finally {
             setLoading(false);
         }
@@ -78,18 +139,16 @@ export const AdminEventManagementPage = () => {
         if (!eventToDelete?.id) return;
         setLoading(true);
         try {
-            await service.events.delete(eventToDelete.id);
+            await service.delete(eventToDelete.id);
             setEventToDelete(null);
             if (dialogOpen && editing.id === eventToDelete.id) {
                 setDialogOpen(false);
             }
-            fetchData();
+            refetch();
         } finally {
             setLoading(false);
         }
     }
-
-    const templateEvents = events.filter((e) => e.template);
 
     const columns = [
         { field: 'name', headerName: 'Name', flex: 1 },
@@ -137,12 +196,21 @@ export const AdminEventManagementPage = () => {
                     <Card>
                         <CardContent>
                             <DataGrid
-                                rows={events}
+                                rows={pageInfo.rows}
                                 columns={columns}
                                 autoHeight
                                 disableRowSelectionOnClick
+
+                                paginationMode='server'
+                                paginationModel={paginationModel}
+                                rowCount={pageInfo.totalRowCount}
+                                onPaginationModelChange={setPaginationModel}
+
+                                sortingMode='server'
+                                sortModel={sortModel}
+                                onSortModelChange={setSortModel}
+
                                 pageSizeOptions={[10, 25]}
-                                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
                             />
                         </CardContent>
                     </Card>
@@ -151,9 +219,9 @@ export const AdminEventManagementPage = () => {
                     <Card>
                         <CardContent>
                             <EventCalendar
-                                events={events}
-                                sessions={sessions}
+                                events={calendarEvents}
                                 onSessionSelect={openSessionFromCalendar}
+                                onRangeChange={setCalendarRange}
                             />
                         </CardContent>
                     </Card>
@@ -167,7 +235,7 @@ export const AdminEventManagementPage = () => {
                 templateEvents={templateEvents}
                 initialSessionId={initialSessionId}
                 onClose={() => setDialogOpen(false)}
-                onSaved={fetchData}
+                onSaved={refetch}
                 onInitialSessionOpened={() => setInitialSessionId(null)}
             />
 

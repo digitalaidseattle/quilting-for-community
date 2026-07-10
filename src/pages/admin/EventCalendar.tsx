@@ -18,10 +18,15 @@ type CalendarEvent = {
     };
 };
 
+export type CalendarRange = {
+    start: Date;
+    end: Date;
+};
+
 type EventCalendarProps = {
     events: Event[];
-    sessions: EventSession[];
     onSessionSelect: (event: Event, session: EventSession) => void;
+    onRangeChange: (range: CalendarRange) => void;
 };
 
 function statusColor(status: SessionStatus): string {
@@ -35,26 +40,28 @@ function statusColor(status: SessionStatus): string {
     }
 }
 
-export const EventCalendar = ({ events, sessions, onSessionSelect }: EventCalendarProps) => {
-    const eventsById = useMemo(
-        () => new Map(events.map((event) => [event.id as string, event])),
-        [events],
-    );
-
-    const calendarEvents = useMemo<CalendarEvent[]>(() => sessions.flatMap((session) => {
-        const event = eventsById.get(session.event_id);
-        if (!event) {
-            return [];
-        }
-
-        return [{
+export const EventCalendar = ({ events, onSessionSelect, onRangeChange }: EventCalendarProps) => {
+    const calendarEvents = useMemo<CalendarEvent[]>(() => events.flatMap((event) =>
+        (event.event_sessions ?? []).map((session) => ({
             id: session.id as string,
             title: event.name,
             start: new Date(session.start_at),
             end: new Date(session.end_at),
             resource: { session, event },
-        }];
-    }), [eventsById, sessions]);
+        }))
+    ), [events]);
+
+    function handleRangeChange(range: Date[] | { start: Date; end: Date }) {
+        if (Array.isArray(range)) {
+            // Week and day views report the visible days as an array.
+            onRangeChange({
+                start: range[0],
+                end: dayjs(range[range.length - 1]).endOf('day').toDate(),
+            });
+        } else {
+            onRangeChange(range);
+        }
+    }
 
     return (
         <Stack spacing={2}>
@@ -82,6 +89,7 @@ export const EventCalendar = ({ events, sessions, onSessionSelect }: EventCalend
                     endAccessor="end"
                     style={{ height: '100%' }}
                     popup
+                    onRangeChange={handleRangeChange}
                     onSelectEvent={(calEvent) => onSessionSelect(calEvent.resource.event, calEvent.resource.session)}
                     eventPropGetter={(calEvent) => ({
                         style: {

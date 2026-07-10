@@ -1,4 +1,4 @@
-import { Identifier } from "@digitalaidseattle/core";
+import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaidseattle/core";
 import { EventSessionsService } from "./EventSessionsService";
 import { EventsEntityService } from "./EventsEntityService";
 import {
@@ -6,6 +6,7 @@ import {
     EventSession,
 } from "./types";
 
+// Handles both events and their sessions
 export class EventsService {
     private static instance: EventsService;
 
@@ -17,34 +18,67 @@ export class EventsService {
     }
 
     constructor(
-        readonly events = EventsEntityService.getInstance(),
-        readonly sessions = EventSessionsService.getInstance(),
+        private readonly events = EventsEntityService.getInstance(),
+        private readonly sessions = EventSessionsService.getInstance(),
     ) { }
 
+    find(query: QueryModel, opts?: DataAccessOptions<Event>): Promise<PageInfo<Event>> {
+        return this.events.find(query, opts);
+    }
+
+    getById(id: Identifier): Promise<Event | null> {
+        return this.events.getById(id);
+    }
+
+    // Inserts or updates the event and its sessions
+    async save(event: Event): Promise<Event> {
+        const { event_sessions, ...fields } = event;
+        const saved = event.id
+            ? await this.events.update(event.id, fields)
+            : await this.events.insert(fields as Event);
+
+        if (event_sessions) {
+            const existing = event.id ? await this.sessions.getByEventId(saved.id as string) : [];
+            const keptIds = new Set(event_sessions.map((session) => session.id));
+
+            await Promise.all([
+                ...existing
+                    .filter((session) => !keptIds.has(session.id))
+                    .map((session) => this.sessions.delete(session.id as string)),
+                ...event_sessions.map((session) => this.sessions.upsert({
+                    ...session,
+                    event_id: saved.id as string,
+                })),
+            ]);
+        }
+
+        return await this.getById(saved.id as string) as Event;
+    }
+
+    async delete(id: Identifier): Promise<void> {
+        return this.events.delete(id);
+    }
+
     async cloneEvent(id: Identifier, overrides: Partial<Event> = {}): Promise<Event> {
-        const source = await this.events.getById(id);
+        const source = await this.getById(id);
         if (!source) {
             throw new Error(`Event not found: ${id}`);
         }
         const { id: _id, created_at, updated_at, event_sessions, ...rest } = source;
-        const cloned = await this.events.insert({
+        return this.save({
             ...rest,
             ...overrides,
             template: false,
             name: overrides.name ?? `${source.name} (copy)`,
+            event_sessions: (event_sessions ?? []).map((session) => {
+                const { id: _sessionId, created_at: _ca, updated_at: _ua, ...sessionRest } = session;
+                return {
+                    ...sessionRest,
+                    id: crypto.randomUUID(),
+                    status: 'draft',
+                } as EventSession;
+            }),
         } as Event);
-
-        const sessions = await this.sessions.getByEventId(id as string);
-        await Promise.all(sessions.map((session) => {
-            const { id: sessionId, created_at: _ca, updated_at: _ua, ...sessionRest } = session;
-            return this.sessions.insert({
-                ...sessionRest,
-                event_id: cloned.id as string,
-                status: 'draft',
-            } as EventSession);
-        }));
-
-        return cloned;
     }
 
     sessionFromEvent(event: Event, overrides: Partial<EventSession>): EventSession {

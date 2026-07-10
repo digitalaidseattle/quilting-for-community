@@ -20,6 +20,7 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
 import { LoadingContext } from "@digitalaidseattle/core";
+import { NumberField } from "../../components/NumberField";
 import { EventsService } from "../../services/events/EventsService";
 import { EventSessionsDao } from "../../services/events/EventSessionsDao";
 import { Event, EventSession, SessionStatus } from "../../services/events/types";
@@ -48,19 +49,18 @@ export const EventDialog = ({
 }: EventDialogProps) => {
     const { setLoading } = useContext(LoadingContext);
     const [event, setEvent] = useState<Event>(editing);
-    const [sessions, setSessions] = useState<EventSession[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
     const [editingSession, setEditingSession] = useState<EventSession>(EventSessionsDao.empty());
     const [confirmDelete, setConfirmDelete] = useState<{ type: 'event' } | { type: 'session', session: EventSession } | null>(null);
 
+    const sessions = event.event_sessions ?? [];
+
     useEffect(() => {
         setEvent(editing);
         setSelectedTemplateId('');
         if (editing.id) {
-            service.sessions.getByEventId(editing.id as string).then(setSessions);
-        } else {
-            setSessions([]);
+            service.getById(editing.id).then((full) => setEvent(full ?? editing));
         }
     }, [editing, open]);
 
@@ -89,20 +89,15 @@ export const EventDialog = ({
             ...rest,
             template: false,
             name: `${template.name} (copy)`,
+            // Keep any sessions the user has already drafted for this event.
+            event_sessions: event.event_sessions,
         } as Event);
     }
 
     async function handleSaveEvent() {
-        // event_sessions is a read-only join; it isn't a real column so it must
-        // be stripped before writing.
-        const { event_sessions: _sessions, ...payload } = event;
         setLoading(true);
         try {
-            if (event.id) {
-                await service.events.update(event.id, payload);
-            } else {
-                await service.events.insert(payload as Event);
-            }
+            await service.save(event);
             onSaved();
             onClose();
         } finally {
@@ -111,7 +106,6 @@ export const EventDialog = ({
     }
 
     function openNewSession() {
-        if (!event.id) return;
         const start = new Date();
         const draft = service.sessionFromEvent(event, {
             start_at: start.toISOString().slice(0, 16),
@@ -134,47 +128,46 @@ export const EventDialog = ({
         setSessionDialogOpen(true);
     }
 
-    async function handleSaveSession() {
-        if (!event.id) return;
-        const payload = {
+    // Session edits only touch the local aggregate. They persist with "Save event".
+    function handleSaveSession() {
+        const start = new Date(editingSession.start_at);
+        const normalized = {
             ...editingSession,
-            event_id: event.id as string,
-            start_at: new Date(editingSession.start_at).toISOString(),
-            end_at: new Date(editingSession.end_at).toISOString(),
-        };
-        setLoading(true);
-        try {
-            if (editingSession.id) {
-                await service.sessions.update(editingSession.id, payload);
-            } else {
-                await service.sessions.insert(payload as EventSession);
-            }
-            setSessionDialogOpen(false);
-            setSessions(await service.sessions.getByEventId(event.id as string));
-            onSaved();
-        } finally {
-            setLoading(false);
-        }
+            id: editingSession.id ?? crypto.randomUUID(),
+            event_id: (event.id as string) ?? '',
+            start_at: start.toISOString(),
+            end_at: new Date(start.getTime() + event.duration * 60000).toISOString(),
+        } as EventSession;
+
+        const others = sessions.filter((session) => session.id !== normalized.id);
+        setEvent({
+            ...event,
+            event_sessions: [...others, normalized]
+                .sort((a, b) => a.start_at.localeCompare(b.start_at)),
+        });
+        setSessionDialogOpen(false);
     }
 
     async function handleConfirmDelete() {
-        if (!confirmDelete || !event.id) return;
-        setLoading(true);
-        try {
-            if (confirmDelete.type === 'event') {
-                await service.events.delete(event.id);
+        if (!confirmDelete) return;
+        if (confirmDelete.type === 'event') {
+            if (!event.id) return;
+            setLoading(true);
+            try {
+                await service.delete(event.id);
                 setConfirmDelete(null);
                 onSaved();
                 onClose();
-            } else if (confirmDelete.session.id) {
-                await service.sessions.delete(confirmDelete.session.id);
-                setConfirmDelete(null);
-                setSessionDialogOpen(false);
-                setSessions(await service.sessions.getByEventId(event.id as string));
-                onSaved();
+            } finally {
+                setLoading(false);
             }
-        } finally {
-            setLoading(false);
+        } else {
+            setEvent({
+                ...event,
+                event_sessions: sessions.filter((session) => session.id !== confirmDelete.session.id),
+            });
+            setConfirmDelete(null);
+            setSessionDialogOpen(false);
         }
     }
 
@@ -231,14 +224,14 @@ export const EventDialog = ({
                         <TextField label="Notes" value={event.notes} onChange={(e) => setEvent({ ...event, notes: e.target.value })} multiline rows={2} fullWidth />
                         <TextField label="Category" value={event.category} onChange={(e) => setEvent({ ...event, category: e.target.value })} fullWidth />
                         <Stack direction="row" spacing={2}>
-                            <TextField label="Duration (minutes)" type="number" value={event.duration} onChange={(e) => setEvent({ ...event, duration: Number(e.target.value) })} sx={{ flex: 1 }} />
-                            <TextField label="Max seats" type="number" value={event.max_seats} onChange={(e) => setEvent({ ...event, max_seats: Number(e.target.value) })} sx={{ flex: 1 }} />
-                            <TextField label="Volunteer seats" type="number" value={event.volunteer_seat_count} onChange={(e) => setEvent({ ...event, volunteer_seat_count: Number(e.target.value) })} sx={{ flex: 1 }} />
+                            <NumberField label="Duration (minutes)" value={event.duration} onChange={(duration) => setEvent({ ...event, duration })} sx={{ flex: 1 }} />
+                            <NumberField label="Max seats" value={event.max_seats} onChange={(max_seats) => setEvent({ ...event, max_seats })} sx={{ flex: 1 }} />
+                            <NumberField label="Volunteer seats" value={event.volunteer_seat_count} onChange={(volunteer_seat_count) => setEvent({ ...event, volunteer_seat_count })} sx={{ flex: 1 }} />
                         </Stack>
                         <Stack direction="row" spacing={2}>
-                            <TextField label="Price min" type="number" value={event.price_min} onChange={(e) => setEvent({ ...event, price_min: Number(e.target.value) })} sx={{ flex: 1 }} />
-                            <TextField label="Price" type="number" value={event.price} onChange={(e) => setEvent({ ...event, price: Number(e.target.value) })} sx={{ flex: 1 }} />
-                            <TextField label="Price max" type="number" value={event.price_max} onChange={(e) => setEvent({ ...event, price_max: Number(e.target.value) })} sx={{ flex: 1 }} />
+                            <NumberField label="Price min" value={event.price_min} onChange={(price_min) => setEvent({ ...event, price_min })} sx={{ flex: 1 }} />
+                            <NumberField label="Price" value={event.price} onChange={(price) => setEvent({ ...event, price })} sx={{ flex: 1 }} />
+                            <NumberField label="Price max" value={event.price_max} onChange={(price_max) => setEvent({ ...event, price_max })} sx={{ flex: 1 }} />
                         </Stack>
                         <FormControlLabel
                             control={
@@ -250,25 +243,23 @@ export const EventDialog = ({
                             label="Mark as template (shows in clone picker for other events)"
                         />
 
-                        {event.id && (
-                            <Stack spacing={1}>
-                                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                    <Typography variant="subtitle1">Sessions</Typography>
-                                    <Button size="small" startIcon={<PlusOutlined />} onClick={openNewSession}>
-                                        Add session
-                                    </Button>
-                                </Stack>
-                                <DataGrid
-                                    rows={sessions}
-                                    columns={sessionColumns}
-                                    autoHeight
-                                    disableRowSelectionOnClick
-                                    hideFooter={sessions.length <= 5}
-                                    pageSizeOptions={[5, 10]}
-                                    initialState={{ pagination: { paginationModel: { pageSize: 5 } } }}
-                                />
+                        <Stack spacing={1}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                <Typography variant="subtitle1">Sessions</Typography>
+                                <Button size="small" startIcon={<PlusOutlined />} onClick={openNewSession}>
+                                    Add session
+                                </Button>
                             </Stack>
-                        )}
+                            <DataGrid
+                                rows={sessions}
+                                columns={sessionColumns}
+                                autoHeight
+                                disableRowSelectionOnClick
+                                hideFooter={sessions.length <= 5}
+                                pageSizeOptions={[5, 10]}
+                                initialState={{ pagination: { paginationModel: { pageSize: 5 } } }}
+                            />
+                        </Stack>
                     </Stack>
                 </DialogContent>
                 <DialogActions>
@@ -289,16 +280,14 @@ export const EventDialog = ({
                                     ...editingSession,
                                     start_at: value?.format('YYYY-MM-DDTHH:mm') ?? '',
                                 })}
-                                slotProps={{ textField: { fullWidth: true } }}
-                            />
-                            <DateTimePicker
-                                label="End"
-                                value={editingSession.end_at ? dayjs(editingSession.end_at) : null}
-                                onChange={(value) => setEditingSession({
-                                    ...editingSession,
-                                    end_at: value?.format('YYYY-MM-DDTHH:mm') ?? '',
-                                })}
-                                slotProps={{ textField: { fullWidth: true } }}
+                                slotProps={{
+                                    textField: {
+                                        fullWidth: true,
+                                        helperText: editingSession.start_at
+                                            ? `Ends ${dayjs(editingSession.start_at).add(event.duration, 'minute').format('MMM D, YYYY h:mm A')} (${event.duration} min)`
+                                            : `Duration: ${event.duration} min`,
+                                    },
+                                }}
                             />
                             <TextField
                                 select
@@ -324,11 +313,10 @@ export const EventDialog = ({
                                 label={`Override max seats (event default: ${event.max_seats})`}
                             />
                             {editingSession.max_seats != null && (
-                                <TextField
+                                <NumberField
                                     label="Max seats"
-                                    type="number"
                                     value={editingSession.max_seats}
-                                    onChange={(e) => setEditingSession({ ...editingSession, max_seats: Number(e.target.value) })}
+                                    onChange={(max_seats) => setEditingSession({ ...editingSession, max_seats })}
                                     fullWidth
                                 />
                             )}
@@ -355,7 +343,7 @@ export const EventDialog = ({
                     confirmDelete?.type === 'event'
                         ? `Delete "${event.name}" and all of its sessions? This cannot be undone.`
                         : confirmDelete?.type === 'session'
-                            ? `Delete this session starting ${formatSessionDate(confirmDelete.session.start_at)}? This cannot be undone.`
+                            ? `Remove this session starting ${formatSessionDate(confirmDelete.session.start_at)}? It will be deleted when you save the event.`
                             : ''
                 }
                 handleConfirm={handleConfirmDelete}
