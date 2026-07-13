@@ -3,13 +3,14 @@
  * 
  * @copyright 2026 Digital Aid Seattle
 */
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { HomeOutlined } from "@ant-design/icons";
 import { Breadcrumbs, Card, CardContent, IconButton, Stack, Typography } from '@mui/material';
 import {
   DataGrid,
+  GridRowParams,
   GridSortModel,
   useGridApiRef
 } from '@mui/x-data-grid';
@@ -25,7 +26,6 @@ import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
 
 export const MembersPage = () => {
   const profilesDao = ProfilesDao.getInstance();
-
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
@@ -33,10 +33,6 @@ export const MembersPage = () => {
   const { setLoading } = useContext(LoadingContext);
   const { refresh } = useContext(RefreshContext);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchData();
-  }, [paginationModel, sortModel, refresh])
 
   const columns = [
     {
@@ -51,7 +47,7 @@ export const MembersPage = () => {
     }
   ];
 
-  function fetchData() {
+  const fetchData = useCallback(() => {
     if (paginationModel && sortModel) {
       const queryModel = {
         page: paginationModel.page,
@@ -66,9 +62,13 @@ export const MembersPage = () => {
         .finally(() => setLoading(false))
     }
 
-  }
+  }, [paginationModel, profilesDao, setLoading, sortModel]);
 
-  function handleRowClick(params: any, _event: any, _details: any): void {
+  useEffect(() => {
+    fetchData();
+  }, [fetchData, refresh])
+
+  function handleRowClick(params: GridRowParams<Profile>): void {
     navigate(`/profile/${params.row.id}`)
   }
 
