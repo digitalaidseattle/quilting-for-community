@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { ProfilesDao } from "../../../../../src/services/members/ProfilesDao";
 import { EntityNotFoundError } from "../../../../../src/utils/exceptions";
@@ -19,6 +19,23 @@ describe("ProfilesDao", () => {
 
     beforeAll(() => {
         profilesDao = ProfilesDao.getInstance(adminClient);
+    });
+
+    beforeEach(async () => {
+        const { data, error } = await adminClient
+            .from("profiles")
+            .select("id")
+            .ilike("email", "PROFILE_DAO_TEST_%");
+
+        if (error) {
+            console.error("Error getting test profiles for cleanup: ", error);
+        }
+
+        if (data && data.length > 0) {
+            for (const profile of data) {
+                await adminClient.auth.admin.deleteUser(profile.id);
+            }
+        }
     });
 
     test("getById should return a single profile", async () => {
