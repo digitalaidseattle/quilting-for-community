@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { ProfilesDao } from "../../../../../src/services/members/ProfilesDao";
-import { EntityNotFoundError } from "../../../../../src/utils/exceptions";
+import { DatabaseError, EntityNotFoundError } from "../../../../../src/utils/exceptions";
 import process from "node:process";
 
 const adminClient = createClient(
@@ -13,6 +13,32 @@ const appClient = createClient(
     "http://localhost:54321",
     process.env.VITE_SUPABASE_ANON_KEY
 );
+
+const createTestUser = async () => {
+    const { data, error } = await adminClient.auth.admin.createUser({
+        email: `PROFILE_DAO_TEST_${Date.now()}@example.com`,
+        password: "password",
+        email_confirm: true,
+        user_metadata: {
+            first_name: "Test",
+            last_name: "User",
+            phone: "1234567890",
+            roles: ["member"],
+        },
+    });
+
+    if (error) {
+        console.error("Failed to create test user", error);
+        throw error;
+    }
+
+    if (!data.user) {
+        console.error("No user returned from createUser");
+        throw new Error("No user returned from createUser");
+    }
+
+    return data.user;
+};
 
 describe("ProfilesDao", () => {
     let profilesDao: ProfilesDao;
@@ -39,35 +65,15 @@ describe("ProfilesDao", () => {
     });
 
     test("getById should return a single profile", async () => {
-        const { data, error } = await adminClient.auth.admin.createUser({
-            email: `PROFILE_DAO_TEST_${Date.now()}@example.com`,
-            password: "password",
-            email_confirm: true,
-            user_metadata: {
-                first_name: "Test",
-                last_name: "User",
-                phone: "1234567890",
-                roles: ["member"],
-            },
-        });
+        expect.assertions(7);
 
-        if (error) {
-            console.error("Failed to create test user", error);
-            throw error;
-        }
-
-        if (!data.user) {
-            console.error("No user returned from createUser");
-            throw new Error("No user returned from createUser");
-        }
-
-        const { user } = data;
+        const user = await createTestUser();
         const { user_metadata: userMetaData } = user;
 
-        const profile = await profilesDao.getById(data.user.id);
+        const profile = await profilesDao.getById(user.id);
         expect(profile).toBeDefined();
-        expect(profile.id).toBe(data.user.id);
-        expect(profile.email).toBe(data.user.email);
+        expect(profile.id).toBe(user.id);
+        expect(profile.email).toBe(user.email);
         expect(profile.first_name).toBe(userMetaData.first_name);
         expect(profile.last_name).toBe(userMetaData.last_name);
         expect(profile.roles).toEqual(userMetaData.roles);
@@ -75,7 +81,38 @@ describe("ProfilesDao", () => {
     });
 
     test("getById should raise an error if not found", async () => {
+        expect.assertions(1);
         const nonExistentId = "00000000-0000-0000-0000-000000000000";
         await expect(profilesDao.getById(nonExistentId)).rejects.toThrow(EntityNotFoundError);
+    });
+
+    test("getById should raise an error on any database error", async () => {
+        expect.assertions(1);
+        const badId = "invalid-uuid";
+        await expect(profilesDao.getById(badId)).rejects.toThrow(DatabaseError);
+    });
+
+    test("updateWaiverAccepted should update the waiver_accepted field", async () => {
+        expect.assertions(2);
+
+        const user = await createTestUser();
+
+        const acceptedTrueProfile = await profilesDao.updateWaiverAccepted(user.id, true);
+        expect(acceptedTrueProfile.waiver_accepted).toBe(true);
+
+        const acceptedFalseProfile = await profilesDao.updateWaiverAccepted(user.id, false);
+        expect(acceptedFalseProfile.waiver_accepted).toBe(false);
+    });
+
+    test("updateWaiverAccepted should raise an error if profile not found", async () => {
+        expect.assertions(1);
+        const nonExistentId = "00000000-0000-0000-0000-000000000000";
+        await expect(profilesDao.updateWaiverAccepted(nonExistentId, true)).rejects.toThrow(EntityNotFoundError);
+    });
+
+    test("updateWaiverAccepted should raise an error on any database error", async () => {
+        expect.assertions(1);
+        const badId = "invalid-uuid";
+        await expect(profilesDao.updateWaiverAccepted(badId, true)).rejects.toThrow(DatabaseError);
     });
 });

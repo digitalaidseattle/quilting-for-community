@@ -8,7 +8,7 @@
 import { Entity, Identifier } from "@digitalaidseattle/core";
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { EntityNotFoundError } from "../../utils/exceptions";
+import { DatabaseError, EntityNotFoundError } from "../../utils/exceptions";
 
 export type Profile = Entity & {
     name: string;
@@ -18,6 +18,11 @@ export type Profile = Entity & {
     phone: string;
     roles: string[];
     waiver_accepted: boolean;
+}
+
+type SupabaseProfileDatabase = {
+    Row: Profile;
+    Update: Partial<Profile>;
 }
 
 const DEFAULT_SELECT = '*';
@@ -34,14 +39,14 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
 
     async getById(id: Identifier): Promise<Profile> {
         const { data, error } = await this.client
-            .from<string, { Row: Profile }>(this.tableName)
+            .from<string, SupabaseProfileDatabase>(this.tableName)
             .select()
             .eq('id', id)
             .limit(1)
             .maybeSingle();
 
         if (error) {
-            console.error(`Error fetching profile with id ${id}:`, error);
+            throw new DatabaseError(`Error fetching profile ${id}`, { cause: error });
         }
 
         if (!data) {
@@ -51,4 +56,23 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
         return data;
     }
 
+    async updateWaiverAccepted(id: Identifier, accepted: boolean): Promise<Profile> {
+        const { data, error } = await this.client
+            .from<string, SupabaseProfileDatabase>(this.tableName)
+            .update({ waiver_accepted: accepted })
+            .eq('id', id)
+            .limit(1)
+            .select()
+            .maybeSingle();
+
+        if (error) {
+            throw new DatabaseError(`Error updating profile ${id}`, { cause: error });
+        }
+
+        if (!data) {
+            throw new EntityNotFoundError('Profile', id);
+        }
+
+        return data;
+    }
 }
