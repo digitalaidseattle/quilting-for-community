@@ -4,7 +4,6 @@ import {
   MarkdownPage,
   MinimalLayout
 } from "@digitalaidseattle/mui";
-import { AuthGate } from "@digitalaidseattle/core";
 
 import SamplePage from './SamplePage';
 import LoginPage from './LoginPage';
@@ -14,6 +13,7 @@ import { ProductsPage } from "./ProductsPage";
 import { AdminEventManagementPage } from "./admin/AdminEventManagementPage";
 import { EventsPage } from "./EventsPage";
 import { ClassesPage } from "./ClassesPage";
+import { RequireRoles } from "../components/RequireRoles";
 
 const routes = [
   {
@@ -27,7 +27,9 @@ const routes = [
       {
         path: "/members",
         element: (
-          <MembersPage />
+          <RequireRoles authorizedRoles={["admin"]}>
+            <MembersPage />
+          </RequireRoles>
         ),
       },
       {
@@ -41,9 +43,9 @@ const routes = [
       {
         path: "/admin/event-management",
         element: (
-          <AuthGate authorizedRoles={["admin"]}>
+          <RequireRoles authorizedRoles={["admin"]}>
             <AdminEventManagementPage />
-          </AuthGate>
+          </RequireRoles>
         ),
       },
       {
