@@ -1,5 +1,11 @@
+drop trigger if exists on_auth_user_initialize_roles on auth.users;
 drop trigger if exists on_auth_user_created on auth.users;
 drop trigger if exists on_auth_user_updated on auth.users;
+
+create trigger on_auth_user_initialize_roles
+before insert on auth.users
+for each row
+execute function public.initialize_auth_user_roles();
 
 create trigger on_auth_user_created
 after insert on auth.users

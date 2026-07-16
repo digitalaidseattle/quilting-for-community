@@ -19,7 +19,19 @@ language sql
 immutable
 set search_path = public
 as $$
-  select array['user', 'participant', 'volunteer', 'instructor', 'admin']::text[];
+  select array['participant', 'volunteer', 'instructor', 'admin']::text[];
+$$;
+
+create or replace function public.profile_app_metadata_object(metadata jsonb)
+returns jsonb
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when jsonb_typeof(metadata) = 'object' then metadata
+    else '{}'::jsonb
+  end;
 $$;
 
 create or replace function public.normalize_profile_roles(input_roles text[])
@@ -98,17 +110,28 @@ as $$
 $$;
 
 -- Normalize existing app metadata roles without trusting client-editable
--- raw_user_meta_data.roles. Known admins should be seeded through the
--- admin-only RPC or a database-owner bootstrap script.
-with candidate_roles as (
+-- raw_user_meta_data.roles. Accounts without a supported canonical role become
+-- participants so every account has at least one product role. Known admins
+-- should be seeded through the admin-only RPC or a database-owner bootstrap
+-- script.
+with parsed_roles as (
   select
     id,
     public.profile_roles_from_jsonb(raw_app_meta_data) as roles
   from auth.users
+),
+candidate_roles as (
+  select
+    id,
+    case
+      when cardinality(roles) = 0 then array['participant']::text[]
+      else roles
+    end as roles
+  from parsed_roles
 )
 update auth.users as users
 set raw_app_meta_data = jsonb_set(
-  coalesce(users.raw_app_meta_data, '{}'::jsonb),
+  public.profile_app_metadata_object(users.raw_app_meta_data),
   '{roles}',
   to_jsonb(candidate_roles.roles),
   true
@@ -133,6 +156,32 @@ where profiles.id = users.id
 -- ---------------------------------------------------------------------------
 -- Auth/profile sync
 -- ---------------------------------------------------------------------------
+
+create or replace function public.initialize_auth_user_roles()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized_roles text[];
+begin
+  normalized_roles := public.profile_roles_from_jsonb(new.raw_app_meta_data);
+
+  if cardinality(normalized_roles) = 0 then
+    normalized_roles := array['participant']::text[];
+  end if;
+
+  new.raw_app_meta_data := jsonb_set(
+    public.profile_app_metadata_object(new.raw_app_meta_data),
+    '{roles}',
+    to_jsonb(normalized_roles),
+    true
+  );
+
+  return new;
+end;
+$$;
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -187,6 +236,13 @@ begin
   return new;
 end;
 $$;
+
+drop trigger if exists on_auth_user_initialize_roles on auth.users;
+
+create trigger on_auth_user_initialize_roles
+before insert on auth.users
+for each row
+execute function public.initialize_auth_user_roles();
 
 drop trigger if exists on_auth_user_updated on auth.users;
 
@@ -277,9 +333,14 @@ begin
 
   normalized_roles := public.normalize_profile_roles(new_roles);
 
+  if cardinality(normalized_roles) = 0 then
+    raise exception 'At least one profile role is required'
+      using errcode = '22023';
+  end if;
+
   update auth.users
   set raw_app_meta_data = jsonb_set(
-    coalesce(raw_app_meta_data, '{}'::jsonb),
+    public.profile_app_metadata_object(raw_app_meta_data),
     '{roles}',
     to_jsonb(normalized_roles),
     true
@@ -337,10 +398,13 @@ grant execute on function public.set_user_roles(uuid, text[]) to authenticated;
 
 alter table public.profiles enable row level security;
 
-grant usage on schema public to authenticated;
-grant select, insert, update, delete on public.profiles to authenticated;
-grant select, insert, update, delete on public.events to authenticated;
-grant select, insert, update, delete on public.event_sessions to authenticated;
+revoke all privileges on table public.profiles, public.events, public.event_sessions
+  from public, anon, authenticated;
+
+grant usage on schema public to authenticated, service_role;
+grant select, insert, update, delete on public.profiles to authenticated, service_role;
+grant select, insert, update, delete on public.events to authenticated, service_role;
+grant select, insert, update, delete on public.event_sessions to authenticated, service_role;
 
 drop policy if exists profiles_select_own_or_admin on public.profiles;
 drop policy if exists profiles_insert_admin on public.profiles;

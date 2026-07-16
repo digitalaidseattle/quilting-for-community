@@ -2,54 +2,47 @@
 -- Prefer the admin-only RPC when running as an authenticated admin:
 --
 --   select public.set_user_roles(
---     '2cfdb388-6c5a-4c4b-b8a5-836552a7c061',
+--     '<existing-auth-user-uuid>',
 --     array['admin']::text[]
 --   );
 --
--- For local bootstrap/manual maintenance as a database owner, update app
--- metadata; the auth-user update trigger syncs the profile cache.
+-- For first-admin bootstrap/manual maintenance, run the block below as the
+-- database owner after replacing NULL below with an existing Auth user UUID.
+-- It fails and rolls back if the target or synchronized profile does not exist.
 
-begin;
+do $$
+declare
+  target_user_id constant uuid := null; -- Replace NULL with '<auth-user-uuid>'.
+  target_email text;
+  synchronized_roles text[];
+begin
+  if target_user_id is null then
+    raise exception 'Replace target_user_id with an existing Auth user UUID';
+  end if;
 
-update auth.users
-set raw_app_meta_data = jsonb_set(
-  coalesce(raw_app_meta_data, '{}'::jsonb),
-  '{roles}',
-  '["admin"]'::jsonb,
-  true
-)
-where id = '2cfdb388-6c5a-4c4b-b8a5-836552a7c061';
+  update auth.users
+  set raw_app_meta_data = jsonb_set(
+    public.profile_app_metadata_object(raw_app_meta_data),
+    '{roles}',
+    '["admin"]'::jsonb,
+    true
+  )
+  where id = target_user_id
+  returning email into target_email;
 
-insert into public.profiles (
-  id,
-  email,
-  name,
-  first_name,
-  last_name,
-  roles,
-  created_by,
-  updated_by
-)
-select
-  users.id,
-  users.email,
-  coalesce(
-    nullif(users.raw_user_meta_data->>'name', ''),
-    nullif(trim(concat_ws(' ', users.raw_user_meta_data->>'first_name', users.raw_user_meta_data->>'last_name')), ''),
-    users.email
-  ),
-  nullif(users.raw_user_meta_data->>'first_name', ''),
-  nullif(users.raw_user_meta_data->>'last_name', ''),
-  public.profile_roles_from_jsonb(users.raw_app_meta_data),
-  users.email,
-  users.email
-from auth.users as users
-where users.id = '2cfdb388-6c5a-4c4b-b8a5-836552a7c061'
-on conflict (id) do update
-set
-  email = excluded.email,
-  roles = excluded.roles,
-  updated_at = now(),
-  updated_by = excluded.updated_by;
+  if not found then
+    raise exception 'Auth user % does not exist', target_user_id;
+  end if;
 
-commit;
+  select roles
+  into synchronized_roles
+  from public.profiles
+  where id = target_user_id;
+
+  if not found or synchronized_roles is distinct from array['admin']::text[] then
+    raise exception 'Profile role synchronization failed for Auth user %', target_user_id;
+  end if;
+
+  raise notice 'Assigned admin role to % (%)', target_email, target_user_id;
+end;
+$$;

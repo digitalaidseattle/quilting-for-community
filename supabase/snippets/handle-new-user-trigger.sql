@@ -1,3 +1,41 @@
+create or replace function public.profile_app_metadata_object(metadata jsonb)
+returns jsonb
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when jsonb_typeof(metadata) = 'object' then metadata
+    else '{}'::jsonb
+  end;
+$$;
+
+create or replace function public.initialize_auth_user_roles()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized_roles text[];
+begin
+  normalized_roles := public.profile_roles_from_jsonb(new.raw_app_meta_data);
+
+  if cardinality(normalized_roles) = 0 then
+    normalized_roles := array['participant']::text[];
+  end if;
+
+  new.raw_app_meta_data := jsonb_set(
+    public.profile_app_metadata_object(new.raw_app_meta_data),
+    '{roles}',
+    to_jsonb(normalized_roles),
+    true
+  );
+
+  return new;
+end;
+$$;
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
