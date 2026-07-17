@@ -10,7 +10,8 @@
     "preview": "vite preview --port 3000",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "test:unit": "vitest --root src/"
+    "test:unit": "vitest --root src/",
+    "test:integration": "vitest --root test/integration"
   },
   "dependencies": {
     "@digitalaidseattle/core": "^1.0.22",

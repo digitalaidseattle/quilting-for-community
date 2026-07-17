@@ -1,4 +1,3 @@
-import { beforeAll, describe, expect, test } from "vitest";
 import { createClient, User } from "@supabase/supabase-js";
 import { Profile } from "../../../../../src/services/members/ProfilesDao";
 import { ProfilesService } from "../../../../../src/services/members/ProfilesService";

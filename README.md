@@ -120,3 +120,17 @@ Since the template uses `react-router-dom` for application routing, there is no 
 
 ### Where does the partner logo get changed?
 The logo, displayed in the upper left hand of the application window and elsewhere, can be modified in `/src/components/Logo/Logo.tsx`.  The image files should be placed in the `/src/assets/images/` directory.
+
+### Integration tests with Supabase CLI
+```bash
+npx supabase start
+npx supabase db reset  # run migrations
+npm run test:integration  # or just test
+```
+
+Required environment variables:
+* `SUPABASE_SECRET_KEY`
+
+Run `npx supabase status` to view authentication keys. `.env.test.local` file can be used.
+
+In order to preserve the local database in case of local manual testing, integration tests should clean up any test data. If this isn't a concern, feel free to run `npx supabase db reset` to reset the database before running the tests.

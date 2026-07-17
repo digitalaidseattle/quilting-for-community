@@ -8,7 +8,7 @@
 import { DataAccessOptions, Entity, Identifier } from "@digitalaidseattle/core";
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { DatabaseError, EntityNotFoundError } from "../../utils/exceptions";
+import { DatabaseError, EntityNotFoundError, UnimplementedError } from "../../utils/exceptions";
 
 export type Profile = Entity & {
     name: string;
@@ -106,5 +106,25 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
         }
 
         return data;
+    }
+
+    override insert(): never {
+        throw new UnimplementedError("Write operations on Profiles not allowed");
+    }
+
+    override update(): never {
+        throw new UnimplementedError("Write operations on Profiles not allowed");
+    }
+
+    override batchInsert(): never {
+        throw new UnimplementedError("Write operations on Profiles not allowed");
+    }
+
+    override delete(): never {
+       throw new UnimplementedError("Write operations on Profiles not allowed"); 
+    }
+
+    override upsert(): never {
+        throw new UnimplementedError("Write operations on Profiles not allowed");
     }
 }
