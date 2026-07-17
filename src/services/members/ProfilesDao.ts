@@ -5,7 +5,7 @@
  *
  */
 
-import { Entity, Identifier } from "@digitalaidseattle/core";
+import { DataAccessOptions, Entity, Identifier } from "@digitalaidseattle/core";
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { DatabaseError, EntityNotFoundError } from "../../utils/exceptions";
@@ -18,6 +18,11 @@ export type Profile = Entity & {
     phone: string;
     roles: string[];
     waiver_accepted: boolean;
+}
+
+export type ProfilesDaoGetAllOptions = DataAccessOptions<Profile> & {
+    start?: number;
+    sort?: { [k in keyof Profile]?: "asc" | "desc" };  // could narrow this if needed
 }
 
 type SupabaseProfileDatabase = {
@@ -35,6 +40,33 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
             ProfilesDao.instance = new ProfilesDao(supabaseClient || SupabaseConfiguration.getInstance().getSupabaseClient(), 'profiles', { select: DEFAULT_SELECT });
         }
         return ProfilesDao.instance;
+    }
+
+    async getAll(opts?: ProfilesDaoGetAllOptions): Promise<Profile[]> {
+        const query = this.client
+            .from<string, SupabaseProfileDatabase>(this.tableName)
+            .select()
+
+        const limit = opts?.count || 25;
+        const start = opts?.start || 0;
+        query.range(start, start + limit - 1);
+
+        if (opts?.sort) {
+            for (const [key, direction] of Object.entries(opts.sort)) {
+                query.order(key, { ascending: direction === 'asc' });
+            }
+        } else {
+            // default to email sort
+            query.order('email', { ascending: true });
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            throw new DatabaseError('Error fetching profiles', { cause: error });
+        }
+
+        return data;
     }
 
     async getById(id: Identifier): Promise<Profile> {
