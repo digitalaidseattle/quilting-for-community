@@ -5,47 +5,52 @@
  *
  */
 import { Identifier } from "@digitalaidseattle/core";
-import { Profile, ProfilesDao } from "./ProfilesDao";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { Profile, ProfilesDao, ProfilesDaoGetAllOptions } from "./ProfilesDao";
+import { EntityNotFoundError } from "../../utils/exceptions";
 
 export class ProfilesService {
 
     private static instance: ProfilesService;
 
-    static getInstance() {
+    static getInstance(supabaseClient?: SupabaseClient) {
         if (!ProfilesService.instance) {
-            ProfilesService.instance = new ProfilesService();
+            if (supabaseClient) {
+                ProfilesService.instance = new ProfilesService(ProfilesDao.getInstance(supabaseClient))
+            } else {
+                ProfilesService.instance = new ProfilesService();
+            }
         }
         return ProfilesService.instance;
     }
 
     constructor(private dao: ProfilesDao = ProfilesDao.getInstance()) { }
 
-    async getAll(): Promise<Profile[]> {
-        return this.dao.getAll();
+    async getAll(opts?: ProfilesDaoGetAllOptions): Promise<Profile[]> {
+        return this.dao.getAll(opts);
     }
 
-    async getById(id: Identifier): Promise<Profile> {
-        return this.dao.getById(id);
+    async getById(id: Identifier): Promise<Profile | null> {
+        try {
+            return await this.dao.getById(id);
+        } catch (error) {
+            if (error instanceof EntityNotFoundError) {
+                return null;
+            } else {
+                throw error;
+            }
+        }
     }
 
-    async batchInsert(entities: Profile[]): Promise<Profile[]> {
-        return this.dao.batchInsert(entities);
+    async updateWaiverAccepted(id: Identifier, accepted: boolean): Promise<Profile | null> {
+        try {
+            return await this.dao.updateWaiverAccepted(id, accepted);
+        } catch (error) {
+            if (error instanceof EntityNotFoundError) {
+                return null;
+            } else {
+                throw error;
+            }
+        }
     }
-
-    async insert(entity: Profile): Promise<Profile> {
-        return this.dao.insert(entity);
-    }
-
-    async update(id: Identifier, changes: Partial<Profile>): Promise<Profile> {
-        return this.dao.update(id, changes);
-    }
-
-    async delete(id: Identifier): Promise<void> {
-        await this.dao.delete(id);
-    }
-
-    async upsert(entity: Profile): Promise<Profile> {
-        return this.dao.upsert(entity);
-    }
-
 }

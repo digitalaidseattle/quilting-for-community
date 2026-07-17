@@ -1,7 +1,8 @@
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test } from "vitest";
 import { createClient, User } from "@supabase/supabase-js";
-import { Profile, ProfilesDao } from "../../../../../src/services/members/ProfilesDao";
-import { DatabaseError, EntityNotFoundError } from "../../../../../src/utils/exceptions";
+import { Profile } from "../../../../../src/services/members/ProfilesDao";
+import { ProfilesService } from "../../../../../src/services/members/ProfilesService";
+import { DatabaseError } from "../../../../../src/utils/exceptions";
 import process from "node:process";
 
 const adminClient = createClient(
@@ -13,7 +14,7 @@ const createTestUser = async (prefix?: string) => {
     const dataPrefix = prefix || "";
 
     const { data, error } = await adminClient.auth.admin.createUser({
-        email: `PROFILE_DAO_TEST${dataPrefix}_${Date.now()}@example.com`,
+        email: `PROFILE_SERVICE_TEST${dataPrefix}_${Date.now()}@example.com`,
         password: "password",
         email_confirm: true,
         user_metadata: {
@@ -37,22 +38,18 @@ const createTestUser = async (prefix?: string) => {
     return data.user;
 };
 
-describe("ProfilesDao", () => {
-    let profilesDao: ProfilesDao;
+describe("ProfilesService", () => {
+    let profilesService: ProfilesService;
     const testUsers: User[] = [];
 
-    // beforeAll(() => {
-    // profilesDao = ProfilesDao.getInstance(adminClient);
-    // });
-
     beforeAll(async () => {
-        profilesDao = ProfilesDao.getInstance(adminClient);
+        profilesService = ProfilesService.getInstance(adminClient);
 
         // Clean up any test profiles created in previous tests
         const { data, error } = await adminClient
             .from("profiles")
             .select("id")
-            .ilike("email", "PROFILE_DAO_TEST_%");
+            .ilike("email", "PROFILE_SERVICE_TEST_%");
 
         if (error) {
             console.error("Error getting test profiles for cleanup: ", error);
@@ -71,31 +68,33 @@ describe("ProfilesDao", () => {
     });
 
     test("getById should return a single profile", async () => {
-        expect.assertions(7);
+        expect.assertions(1);
 
         const user = testUsers[0];
-        const { user_metadata: userMetaData } = user;
 
-        const profile = await profilesDao.getById(user.id);
-        expect(profile).toBeDefined();
-        expect(profile.id).toBe(user.id);
-        expect(profile.email).toBe(user.email);
-        expect(profile.first_name).toBe(userMetaData.first_name);
-        expect(profile.last_name).toBe(userMetaData.last_name);
-        expect(profile.roles).toEqual(userMetaData.roles);
-        expect(profile.waiver_accepted).toBe(false);
+        const profile = await profilesService.getById(user.id);
+        // expect(profile).toBeDefined();
+        expect.assert(profile !== null)
+        expect(profile).toMatchObject({
+            id: user.id,
+            email: user.email,
+            first_name: user.user_metadata.first_name,
+            last_name: user.user_metadata.last_name,
+            roles: user.user_metadata.roles,
+            waiver_accepted: false
+        });
     });
 
-    test("getById should raise an error if not found", async () => {
+    test("getById should return null if not found", async () => {
         expect.assertions(1);
         const nonExistentId = "00000000-0000-0000-0000-000000000000";
-        await expect(profilesDao.getById(nonExistentId)).rejects.toThrow(EntityNotFoundError);
+        expect(await profilesService.getById(nonExistentId)).toBeNull();
     });
 
     test("getById should raise an error on any database error", async () => {
         expect.assertions(1);
         const badId = "invalid-uuid";
-        await expect(profilesDao.getById(badId)).rejects.toThrow(DatabaseError);
+        await expect(profilesService.getById(badId)).rejects.toThrow(DatabaseError);
     });
 
     test.each([
@@ -104,7 +103,7 @@ describe("ProfilesDao", () => {
     ])("getAll should return an array of profiles with count options $opts", async ({ opts }) => {
         expect.assertions(4);
 
-        const profiles = await profilesDao.getAll(opts);
+        const profiles = await profilesService.getAll(opts);
 
         const expectedCount = opts?.count || 25
 
@@ -134,7 +133,7 @@ describe("ProfilesDao", () => {
     test("getAll should get the specified page of profiles", async () => {
         expect.assertions(3);
 
-        const profiles = await profilesDao.getAll({ start: 25 });
+        const profiles = await profilesService.getAll({ start: 25 });
         expect(Array.isArray(profiles)).toBe(true);
         expect(profiles.length).toBe(1);
 
@@ -156,7 +155,7 @@ describe("ProfilesDao", () => {
     ])("getAll should get profiles sorted by $column in $direction order", async ({ column, direction }) => {
         expect.assertions(2);
 
-        const profiles = await profilesDao.getAll({ sort: { [column]: direction } });
+        const profiles = await profilesService.getAll({ sort: { [column]: direction } });
         expect(Array.isArray(profiles)).toBe(true);
         let inOrder = true;
         for (let i = 1; i < profiles.length; i++) {
@@ -176,7 +175,7 @@ describe("ProfilesDao", () => {
 
     test("getAll should raise an error on any database error", async () => {
         expect.assertions(1);
-        await expect(profilesDao.getAll({ count: -1 })).rejects.toThrow(DatabaseError);
+        await expect(profilesService.getAll({ count: -1 })).rejects.toThrow(DatabaseError);
     });
 
     test("updateWaiverAccepted should update the waiver_accepted field", async () => {
@@ -184,22 +183,24 @@ describe("ProfilesDao", () => {
 
         const user = testUsers[0];
 
-        const acceptedTrueProfile = await profilesDao.updateWaiverAccepted(user.id, true);
+        const acceptedTrueProfile = await profilesService.updateWaiverAccepted(user.id, true);
+        expect.assert(acceptedTrueProfile);
         expect(acceptedTrueProfile.waiver_accepted).toBe(true);
 
-        const acceptedFalseProfile = await profilesDao.updateWaiverAccepted(user.id, false);
+        const acceptedFalseProfile = await profilesService.updateWaiverAccepted(user.id, false);
+        expect.assert(acceptedFalseProfile);
         expect(acceptedFalseProfile.waiver_accepted).toBe(false);
     });
 
-    test("updateWaiverAccepted should raise an error if profile not found", async () => {
+    test("updateWaiverAccepted should return null if profile not found", async () => {
         expect.assertions(1);
         const nonExistentId = "00000000-0000-0000-0000-000000000000";
-        await expect(profilesDao.updateWaiverAccepted(nonExistentId, true)).rejects.toThrow(EntityNotFoundError);
+        expect(await profilesService.updateWaiverAccepted(nonExistentId, true)).toBeNull();
     });
 
     test("updateWaiverAccepted should raise an error on any database error", async () => {
         expect.assertions(1);
         const badId = "invalid-uuid";
-        await expect(profilesDao.updateWaiverAccepted(badId, true)).rejects.toThrow(DatabaseError);
+        await expect(profilesService.updateWaiverAccepted(badId, true)).rejects.toThrow(DatabaseError);
     });
 });
