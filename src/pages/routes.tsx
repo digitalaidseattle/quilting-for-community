@@ -1,28 +1,24 @@
 import {
   Error,
-  Login,
   MainLayout,
   MarkdownPage,
   MinimalLayout
 } from "@digitalaidseattle/mui";
-
+import { AuthGate } from "@digitalaidseattle/core";
 
 import SamplePage from './SamplePage';
+import LoginPage from './LoginPage';
 import { MembersPage } from "./MembersPage";
-import { ClassesPage } from "./ClassesPage";
-import { EventsPage } from "./EventsPage";
 import { TransactionsPage } from "./TransactionsPage";
 import { ProductsPage } from "./ProductsPage";
-import { AuthGate } from "@digitalaidseattle/core";
+import { AdminEventManagementPage } from "./admin/AdminEventManagementPage";
+import { EventsPage } from "./EventsPage";
+import { ClassesPage } from "./ClassesPage";
 
 const routes = [
   {
     path: "/",
-    element: (
-      <AuthGate authorizedRoles={["admin"]}>
-        <MainLayout />
-      </AuthGate>
-    ),
+    element: <MainLayout />,
     children: [
       {
         path: "",
@@ -30,7 +26,9 @@ const routes = [
       },
       {
         path: "/members",
-        element: <MembersPage />,
+        element: (
+          <MembersPage />
+        ),
       },
       {
         path: "/classes",
@@ -39,6 +37,14 @@ const routes = [
       {
         path: "/events",
         element: <EventsPage />,
+      },
+      {
+        path: "/admin/event-management",
+        element: (
+          <AuthGate authorizedRoles={["admin"]}>
+            <AdminEventManagementPage />
+          </AuthGate>
+        ),
       },
       {
         path: "/products",
@@ -60,7 +66,7 @@ const routes = [
     children: [
       {
         path: 'login',
-        element: <Login />
+        element: <LoginPage />
       }
     ]
   },

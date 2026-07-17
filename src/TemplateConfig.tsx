@@ -1,12 +1,10 @@
 
-
 import {
     DashboardOutlined,
     DollarOutlined,
     ProductOutlined,
-    RocketOutlined,
     ScheduleOutlined,
-    TeamOutlined
+    TeamOutlined,
 } from '@ant-design/icons';
 import logo from "./assets/images/q4c-logo-square.jpg";
 
@@ -25,7 +23,7 @@ export const TemplateConfig = () => {
                 type: 'item',
                 url: '/',
                 icon: <DashboardOutlined />
-            }
+            },
         ]
     } as MenuItem;
 
@@ -52,8 +50,8 @@ export const TemplateConfig = () => {
                 id: 'events',
                 title: 'Events',
                 type: 'item',
-                url: '/events',
-                icon: <RocketOutlined />
+                url: '/admin/event-management',
+                icon: <ScheduleOutlined />
             } as MenuItem,
             {
                 id: 'products',
