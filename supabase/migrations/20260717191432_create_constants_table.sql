@@ -21,5 +21,23 @@ create trigger constants_set_audit_fields
 
 alter table public.constants enable row level security;
 
-create policy "constants_admin_all" on public.constants
-  for all using (public.is_admin()) with check (public.is_admin());
+create policy "constants_public_read"
+on public.constants
+for select
+using (true);
+
+create policy "constants_admin_insert"
+on public.constants
+for insert
+with check (public.is_admin());
+
+create policy "constants_admin_update"
+on public.constants
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "constants_admin_delete"
+on public.constants
+for delete
+using (public.is_admin());
