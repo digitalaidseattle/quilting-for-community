@@ -21,6 +21,13 @@ import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/Data";
 import { Labels } from "../constants/Labels";
 import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
 
+// ==============================|| DUMMY DATA ||==============================
+
+const DUMMY_PROFILES: Profile[] = [
+  { id: '1', name: 'Alex Johnson', email: 'alex.johnson@example.com' },
+  { id: '2', name: 'Sam Taylor', email: 'sam.taylor@example.com' },
+  { id: '3', name: 'Jordan Lee', email: 'jordan.lee@example.com' },
+] as Profile[];
 
 // ==============================|| SAMPLE PAGE ||============================== //
 
@@ -47,7 +54,13 @@ export const MembersPage = () => {
     }
   ];
 
+  // API data fetch, uncomment to replace dummy data with real data
   const fetchData = useCallback(() => {
+    setPageInfo({
+      rows: DUMMY_PROFILES,
+      totalRowCount: DUMMY_PROFILES.length
+    });
+    /*
     if (paginationModel && sortModel) {
       const queryModel = {
         page: paginationModel.page,
@@ -60,7 +73,7 @@ export const MembersPage = () => {
       profilesDao.find(queryModel)
         .then((sess) => setPageInfo(sess))
         .finally(() => setLoading(false))
-    }
+    }*/
 
   }, [paginationModel, profilesDao, setLoading, sortModel]);
 
