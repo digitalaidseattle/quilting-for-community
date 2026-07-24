@@ -72,12 +72,6 @@ export class Q4CAuthService extends SupabaseAuthService {
         };
     };
 
-    isAuthorized(user: User, authorizedRoles: string[]): boolean {
-        const normalizedAuthorizedRoles = authorizedRoles.map((role) => role.trim().toLowerCase());
-
-        return user.user_metadata.roles?.some((role) => normalizedAuthorizedRoles.includes(role)) ?? false;
-    }
-
     /**
      * Sign in with email and password.
      * Note: Check for error by checking if error field of response is not null. \

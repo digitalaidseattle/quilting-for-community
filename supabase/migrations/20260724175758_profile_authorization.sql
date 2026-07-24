@@ -9,6 +9,9 @@
 
 begin;
 
+comment on column public.profiles.roles is
+  'Read-only synchronized cache of auth.users.raw_app_meta_data.roles; change roles with public.set_user_roles(uuid, text[]).';
+
 -- ---------------------------------------------------------------------------
 -- Role helpers
 -- ---------------------------------------------------------------------------
@@ -258,8 +261,24 @@ when (
 execute function public.handle_new_user();
 
 -- ---------------------------------------------------------------------------
--- Profile role assignment guard/RPC
+-- Profile write guards/RPC
 -- ---------------------------------------------------------------------------
+
+create or replace function public.set_profile_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  actor text := coalesce(auth.jwt()->>'email', auth.uid()::text);
+begin
+  new.created_at := old.created_at;
+  new.created_by := old.created_by;
+  new.updated_at := now();
+  new.updated_by := coalesce(actor, new.updated_by, old.updated_by);
+  return new;
+end;
+$$;
 
 create or replace function public.enforce_profile_role_management()
 returns trigger
@@ -324,9 +343,18 @@ as $$
 declare
   normalized_roles text[];
   actor text := coalesce(auth.jwt()->>'email', auth.uid()::text);
+  actor_is_admin boolean;
   updated_profile public.profiles%rowtype;
 begin
-  if auth.uid() is null or not public.is_admin() then
+  select exists (
+    select 1
+    from auth.users as users
+    where users.id = auth.uid()
+      and 'admin' = any(public.profile_roles_from_jsonb(users.raw_app_meta_data))
+  )
+  into actor_is_admin;
+
+  if not actor_is_admin then
     raise exception 'Only administrators can assign user roles'
       using errcode = '42501';
   end if;
@@ -402,7 +430,10 @@ revoke all privileges on table public.profiles, public.events, public.event_sess
   from public, anon, authenticated;
 
 grant usage on schema public to authenticated, service_role;
-grant select, insert, update, delete on public.profiles to authenticated, service_role;
+grant select on public.profiles to authenticated;
+grant update (name, first_name, last_name, phone, waiver_accepted)
+  on public.profiles to authenticated;
+grant select, insert, update, delete on public.profiles to service_role;
 grant select, insert, update, delete on public.events to authenticated, service_role;
 grant select, insert, update, delete on public.event_sessions to authenticated, service_role;
 
@@ -416,10 +447,6 @@ create policy profiles_select_own_or_admin on public.profiles
   for select to authenticated
   using (id = auth.uid() or public.is_admin());
 
-create policy profiles_insert_admin on public.profiles
-  for insert to authenticated
-  with check (public.is_admin());
-
 create policy profiles_update_own on public.profiles
   for update to authenticated
   using (id = auth.uid())
@@ -429,9 +456,5 @@ create policy profiles_update_admin on public.profiles
   for update to authenticated
   using (public.is_admin())
   with check (public.is_admin());
-
-create policy profiles_delete_admin on public.profiles
-  for delete to authenticated
-  using (public.is_admin());
 
 commit;

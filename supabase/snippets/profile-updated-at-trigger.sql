@@ -3,8 +3,13 @@ returns trigger
 language plpgsql
 set search_path = public
 as $$
+declare
+  actor text := coalesce(auth.jwt()->>'email', auth.uid()::text);
 begin
-  new.updated_at = now();
+  new.created_at := old.created_at;
+  new.created_by := old.created_by;
+  new.updated_at := now();
+  new.updated_by := coalesce(actor, new.updated_by, old.updated_by);
   return new;
 end;
 $$;
