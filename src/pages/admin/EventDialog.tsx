@@ -26,6 +26,13 @@ import { EventSessionsDao } from "../../services/events/EventSessionsDao";
 import { Event, EventSession, SessionStatus } from "../../services/events/types";
 import { formatSessionDate } from "../../utils/date-format";
 
+const PICKER_FORMAT = 'YYYY-MM-DDTHH:mm';
+
+/** Converts a stored UTC timestamp to the local string the picker edits. */
+function toPickerValue(timestamp: string): string {
+    return dayjs(timestamp).format(PICKER_FORMAT);
+}
+
 export type EventDialogProps = {
     service: EventsService;
     open: boolean;
@@ -72,8 +79,8 @@ export const EventDialog = ({
         if (session) {
             setEditingSession({
                 ...session,
-                start_at: session.start_at.slice(0, 16),
-                end_at: session.end_at.slice(0, 16),
+                start_at: toPickerValue(session.start_at),
+                end_at: toPickerValue(session.end_at),
             });
             setSessionDialogOpen(true);
             onInitialSessionOpened?.();
@@ -106,24 +113,20 @@ export const EventDialog = ({
     }
 
     function openNewSession() {
-        const start = new Date();
+        const start = dayjs();
         const draft = service.sessionFromEvent(event, {
-            start_at: start.toISOString().slice(0, 16),
-            end_at: new Date(start.getTime() + event.duration * 60000).toISOString().slice(0, 16),
+            start_at: start.format(PICKER_FORMAT),
+            end_at: start.add(event.duration, 'minute').format(PICKER_FORMAT),
         });
-        setEditingSession({
-            ...draft,
-            start_at: draft.start_at.slice(0, 16),
-            end_at: draft.end_at.slice(0, 16),
-        } as EventSession);
+        setEditingSession(draft);
         setSessionDialogOpen(true);
     }
 
     function openEditSession(session: EventSession) {
         setEditingSession({
             ...session,
-            start_at: session.start_at.slice(0, 16),
-            end_at: session.end_at.slice(0, 16),
+            start_at: toPickerValue(session.start_at),
+            end_at: toPickerValue(session.end_at),
         });
         setSessionDialogOpen(true);
     }
