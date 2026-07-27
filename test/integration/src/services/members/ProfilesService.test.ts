@@ -1,18 +1,26 @@
-import { createClient, User } from "@supabase/supabase-js";
-import { Profile } from "../../../../../src/services/members/ProfilesDao";
+import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
+import { Profile, ProfilesDao } from "../../../../../src/services/members/ProfilesDao";
 import { ProfilesService } from "../../../../../src/services/members/ProfilesService";
-import { DatabaseError } from "../../../../../src/utils/exceptions";
 import process from "node:process";
+import { SupabaseConfiguration } from "@digitalaidseattle/supabase";
+import { beforeAll } from "vitest";
+import { Identifier } from "@digitalaidseattle/core";
 
-const adminClient = createClient(
+// client for creating and deleting test users
+const serviceRoleClient = createClient(
     "http://localhost:54321",
-    process.env.SUPABASE_SECRET_KEY
+    process.env.SUPABASE_SECRET_KEY || "undefined"
 );
 
-const createTestUser = async (prefix?: string) => {
+SupabaseConfiguration.props({
+    supabaseUrl: "http://localhost:54321",
+    anonKey: process.env.VITE_SUPABASE_ANON_KEY || "undefined"
+})
+
+const createTestUser = async (prefix?: string, roles: string[] = ["member"]) => {
     const dataPrefix = prefix || "";
 
-    const { data, error } = await adminClient.auth.admin.createUser({
+    const { data, error } = await serviceRoleClient.auth.admin.createUser({
         email: `PROFILE_SERVICE_TEST${dataPrefix}_${Date.now()}@example.com`,
         password: "password",
         email_confirm: true,
@@ -20,7 +28,7 @@ const createTestUser = async (prefix?: string) => {
             first_name: `Test${dataPrefix}`,
             last_name: `User${dataPrefix}`,
             phone: "1234567890",
-            roles: ["member"],
+            roles,
         },
     });
 
@@ -37,26 +45,44 @@ const createTestUser = async (prefix?: string) => {
     return data.user;
 };
 
+const createLoginlessProfile = async (suffix: string) => {
+    const { data, error } = await serviceRoleClient
+        .from("profiles")
+        .insert({
+            email: `PROFILE_SERVICE_TEST_NOLOGIN_${suffix}_${Date.now()}@example.com`,
+            name: `Nologin ${suffix}`,
+        })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+};
+
 describe("ProfilesService", () => {
-    let profilesService: ProfilesService;
     const testUsers: User[] = [];
+    const testProfiles: {[key: string]: string} = {};  // map user id to profile id
 
     beforeAll(async () => {
-        profilesService = ProfilesService.getInstance(adminClient);
-
         // Clean up any test profiles created in previous tests
-        const { data, error } = await adminClient
+        const { data: cleanUpProfiles, error: cleanUpError } = await serviceRoleClient
             .from("profiles")
-            .select("id")
+            .select("id, uid")
             .ilike("email", "PROFILE_SERVICE_TEST_%");
 
-        if (error) {
-            console.error("Error getting test profiles for cleanup: ", error);
+        if (cleanUpError) {
+            console.error("Error getting test profiles for cleanup: ", cleanUpError);
         }
 
-        if (data && data.length > 0) {
-            for (const profile of data) {
-                await adminClient.auth.admin.deleteUser(profile.id);
+        if (cleanUpProfiles && cleanUpProfiles.length > 0) {
+            for (const profile of cleanUpProfiles) {
+                if (profile.uid) {
+                    await serviceRoleClient.auth.admin.deleteUser(profile.uid);
+                }
+
+                await serviceRoleClient
+                    .from("profiles")
+                    .delete()
+                    .eq("id", profile.id);
             }
         }
 
@@ -64,142 +90,439 @@ describe("ProfilesService", () => {
             const user = await createTestUser(`_${String(i).padStart(2, '0')}`);
             testUsers.push(user);
         }
-    });
 
-    test("getById should return a single profile", async () => {
-        expect.assertions(1);
+        // load profiles as well, should have been created with new users
+        const { data, error } = await serviceRoleClient
+            .from("profiles")
+            .select("id, uid");
 
-        const user = testUsers[0];
+        if (error) {
+            console.error("Error getting new profiles: ", error);
+        }
 
-        const profile = await profilesService.getById(user.id);
-        // expect(profile).toBeDefined();
-        expect.assert(profile !== null)
-        expect(profile).toMatchObject({
-            id: user.id,
-            email: user.email,
-            first_name: user.user_metadata.first_name,
-            last_name: user.user_metadata.last_name,
-            roles: user.user_metadata.roles,
-            waiver_accepted: false
-        });
-    });
-
-    test("getById should return null if not found", async () => {
-        expect.assertions(1);
-        const nonExistentId = "00000000-0000-0000-0000-000000000000";
-        expect(await profilesService.getById(nonExistentId)).toBeNull();
-    });
-
-    test("getById should raise an error on any database error", async () => {
-        expect.assertions(1);
-        const badId = "invalid-uuid";
-        await expect(profilesService.getById(badId)).rejects.toThrow(DatabaseError);
-    });
-
-    test.each([
-        { opts: {} },
-        { opts: { count: 10 } }
-    ])("getAll should return an array of profiles with count options $opts", async ({ opts }) => {
-        expect.assertions(4);
-
-        const profiles = await profilesService.getAll(opts);
-
-        const expectedCount = opts?.count || 25
-
-        expect(Array.isArray(profiles)).toBe(true);
-        expect(profiles.length).toBe(expectedCount);
-
-        expect(profiles[0]).toMatchObject({
-            id: testUsers[0].id,
-            email: testUsers[0].email,
-            first_name: testUsers[0].user_metadata.first_name,
-            last_name: testUsers[0].user_metadata.last_name,
-            roles: testUsers[0].user_metadata.roles,
-            waiver_accepted: false,
-        });
-
-        const lastProfile = profiles[expectedCount - 1];
-        expect(lastProfile).toMatchObject({
-            id: testUsers[expectedCount - 1].id,
-            email: testUsers[expectedCount - 1].email,
-            first_name: testUsers[expectedCount - 1].user_metadata.first_name,
-            last_name: testUsers[expectedCount - 1].user_metadata.last_name,
-            roles: testUsers[expectedCount - 1].user_metadata.roles,
-            waiver_accepted: false,
-        });
-    });
-
-    test("getAll should get the specified page of profiles", async () => {
-        expect.assertions(3);
-
-        const profiles = await profilesService.getAll({ start: 25 });
-        expect(Array.isArray(profiles)).toBe(true);
-        expect(profiles.length).toBe(1);
-
-        expect(profiles[0]).toMatchObject({
-            id: testUsers[testUsers.length - 1].id,
-            email: testUsers[testUsers.length - 1].email,
-            first_name: testUsers[testUsers.length - 1].user_metadata.first_name,
-            last_name: testUsers[testUsers.length - 1].user_metadata.last_name,
-            roles: testUsers[testUsers.length - 1].user_metadata.roles,
-            waiver_accepted: false,
-        });
-    });
-
-    test.each([
-        { column: "email", direction: "asc" },
-        { column: "email", direction: "desc" },
-        { column: "created_at", direction: "asc" },
-        { column: "created_at", direction: "desc" },
-    ])("getAll should get profiles sorted by $column in $direction order", async ({ column, direction }) => {
-        expect.assertions(2);
-
-        const profiles = await profilesService.getAll({ sort: { [column]: direction } });
-        expect(Array.isArray(profiles)).toBe(true);
-        let inOrder = true;
-        for (let i = 1; i < profiles.length; i++) {
-            const thisProfileValue = profiles[i][column as keyof Profile]!;
-            const prevProfile = profiles[i - 1][column as keyof Profile]!;
-            if (direction === "asc" && thisProfileValue < prevProfile) {
-                inOrder = false;
-                break;
-            }
-            if (direction === "desc" && thisProfileValue > prevProfile) {
-                inOrder = false;
-                break;
+        if (data && data.length > 0) {
+            for (const profile of data) {
+                // key by user id
+                testProfiles[profile.uid] = profile.id;
             }
         }
-        expect(inOrder).toBe(true);
     });
 
-    test("getAll should raise an error on any database error", async () => {
-        expect.assertions(1);
-        await expect(profilesService.getAll({ count: -1 })).rejects.toThrow(DatabaseError);
+    describe("smoke tests (bypass RLS)", async () => {
+        let serviceRoleProfileService: ProfilesService;
+
+        beforeAll(async () => {
+            serviceRoleProfileService = new ProfilesService(new ProfilesDao(
+                serviceRoleClient,
+                "profiles",
+                { select: "*" }
+            ))
+        });
+
+        test("getById should return a profile", async () => {
+            expect.assertions(1);
+
+            const testUser = testUsers[0];
+            const profileId = testProfiles[testUser.id];
+
+            const profile = await serviceRoleProfileService.getById(profileId);
+            const { data: expectedProfile } = await serviceRoleClient
+                .from("profiles")
+                .select()
+                .eq("id", profileId)
+                .single();
+            expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("getByUid should return a profile for a user if found", async () => {
+            expect.assertions(1);
+
+            const testUser = testUsers[0];
+
+            const profile = await serviceRoleProfileService.getByUid(testUser.id);
+            const { data: expectedProfile } = await serviceRoleClient
+                .from("profiles")
+                .select()
+                .eq("uid", testUser.id)
+                .single();
+            expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("getByUid should return null if not found", async () => {
+            expect.assertions(1);
+
+            // need to use a valid UUID
+            const profile = await serviceRoleProfileService.getByUid("00000000-0000-0000-0000-000000000000");
+            expect(profile).toBeNull();
+        });
+
+        test("getByUid should throw an error for any unexpected errors", async () => {
+            expect.assertions(1);
+
+            await expect(serviceRoleProfileService.getByUid("bad-uuid")).rejects.toThrow(Error);
+        });
+
+        test("update should update any profile", async () => {
+            const user = testUsers[0];
+            const profileId = testProfiles[user.id];
+            const updateLastName = "FoobarService";
+
+            const profile = await serviceRoleProfileService.update(profileId, {
+                last_name: updateLastName
+            });
+            const { data: expectedProfile } = await serviceRoleClient
+                .from("profiles")
+                .select()
+                .eq("id", profileId)
+                .single();
+            expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("profile survives auth user deletion with uid set to null", async () => {
+            expect.assertions(2);
+
+            const user = await createTestUser("_DELCASCADE");
+            const { data: profileBefore } = await serviceRoleClient
+                .from("profiles")
+                .select("id")
+                .eq("uid", user.id)
+                .single();
+
+            await serviceRoleClient.auth.admin.deleteUser(user.id);
+
+            const { data: profileAfter } = await serviceRoleClient
+                .from("profiles")
+                .select("id, uid")
+                .eq("id", profileBefore!.id)
+                .single();
+
+            expect(profileAfter).not.toBeNull();
+            expect(profileAfter?.uid).toBeNull();
+        });
+
+        test("login-less profile can be created directly with a null uid", async () => {
+            expect.assertions(2);
+
+            const profile = await createLoginlessProfile("A");
+
+            expect(profile.uid).toBeNull();
+            expect(profile.id).toBeDefined();
+        });
+
+        test("multiple login-less profiles can coexist", async () => {
+            expect.assertions(2);
+
+            const first = await createLoginlessProfile("B1");
+            const second = await createLoginlessProfile("B2");
+
+            expect(first.id).not.toEqual(second.id);
+            expect(second.uid).toBeNull();
+        });
+
+        test("a new auth user yields exactly one profile with a distinct id", async () => {
+            expect.assertions(3);
+
+            const user = await createTestUser("_TRIGGERONE");
+            const { data: profiles } = await serviceRoleClient
+                .from("profiles")
+                .select("id, uid")
+                .eq("uid", user.id);
+
+            expect(profiles).toHaveLength(1);
+            expect(profiles![0].uid).toEqual(user.id);
+            expect(profiles![0].id).not.toEqual(user.id);
+        });
+
+        test("an auth email change syncs profiles.email", async () => {
+            expect.assertions(1);
+
+            const user = await createTestUser("_TRIGGEREMAIL");
+            const newEmail = `PROFILE_SERVICE_TEST_TRIGGEREMAIL_UPDATED_${Date.now()}@example.com`;
+
+            await serviceRoleClient.auth.admin.updateUserById(user.id, { email: newEmail });
+
+            const { data: profile } = await serviceRoleClient
+                .from("profiles")
+                .select("email")
+                .eq("uid", user.id)
+                .single();
+
+            // Supabase Auth lowercases emails, and the trigger syncs profiles.email from auth.users.email
+            expect(profile?.email).toEqual(newEmail.toLowerCase());
+        });
+
+        test("a login-only auth update does not stomp profile edits", async () => {
+            expect.assertions(1);
+
+            const user = await createTestUser("_TRIGGERLOGINONLY");
+            const { data: profile } = await serviceRoleClient
+                .from("profiles")
+                .select("id")
+                .eq("uid", user.id)
+                .single();
+
+            await serviceRoleProfileService.update(profile!.id, { name: "Edited Name" });
+
+            // signing in updates auth.users (e.g. last_sign_in_at) without touching
+            // email or user_metadata, exercising the is_login_only_update guard
+            const client = createClient(
+                "http://localhost:54321",
+                process.env.VITE_SUPABASE_ANON_KEY || "undefined"
+            );
+            await client.auth.signInWithPassword({ email: user.email!, password: "password" });
+
+            const { data: profileAfter } = await serviceRoleClient
+                .from("profiles")
+                .select("name")
+                .eq("id", profile!.id)
+                .single();
+
+            expect(profileAfter?.name).toEqual("Edited Name");
+        });
+
+        test("find pages and sorts profiles scoped by a filter", async () => {
+            expect.assertions(2);
+
+            const { rows, totalRowCount } = await serviceRoleProfileService.find({
+                page: 0,
+                pageSize: 10,
+                sortField: "email",
+                sortDirection: "asc",
+                filterModel: {
+                    items: [{ field: "email", operator: "startsWith", value: "PROFILE_SERVICE_TEST_" }],
+                },
+            });
+
+            expect(totalRowCount).toBeGreaterThanOrEqual(26);
+            expect(rows).toHaveLength(10);
+        });
+
+        test("upsert updates an existing profile and leaves roles untouched", async () => {
+            expect.assertions(2);
+
+            const profileId = testProfiles[testUsers[1].id];
+            const { data: before } = await serviceRoleClient
+                .from("profiles")
+                .select("roles")
+                .eq("id", profileId)
+                .single();
+
+            const updated = await serviceRoleProfileService.upsert({
+                id: profileId,
+                last_name: "Upserted",
+                roles: ["admin"],
+            });
+
+            expect(updated.last_name).toEqual("Upserted");
+            expect(updated.roles).toEqual(before?.roles);
+        });
     });
 
-    test("updateWaiverAccepted should update the waiver_accepted field", async () => {
-        expect.assertions(2);
+    describe("as admin user", () => {
+        let adminUser: User;
+        let supabaseClient: SupabaseClient;
+        let adminProfileService: ProfilesService;
 
-        const user = testUsers[0];
+        beforeAll(async () => {
+            adminUser = await createTestUser("_ZZZadmin", ["admin"]);
 
-        const acceptedTrueProfile = await profilesService.updateWaiverAccepted(user.id, true);
-        expect.assert(acceptedTrueProfile);
-        expect(acceptedTrueProfile.waiver_accepted).toBe(true);
+            supabaseClient = createClient(
+                "http://localhost:54321",
+                process.env.VITE_SUPABASE_ANON_KEY || "undefined"
+            );
 
-        const acceptedFalseProfile = await profilesService.updateWaiverAccepted(user.id, false);
-        expect.assert(acceptedFalseProfile);
-        expect(acceptedFalseProfile.waiver_accepted).toBe(false);
+            await supabaseClient.auth.signInWithPassword({email: adminUser.email!, password: "password"});
+            adminProfileService = new ProfilesService(new ProfilesDao(
+                supabaseClient,
+                "profiles",
+                { select: "*" }
+            ));
+        });
+
+        test("getById should return a single profile", async () => {
+            expect.assertions(1);
+
+            const profileId = testProfiles[testUsers[0].id]; 
+
+            const profile = await adminProfileService.getById(profileId);
+            const { data: expectedProfile } = await supabaseClient
+                .from("profiles")
+                .select()
+                .eq("id", profileId)
+                .single();
+            expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("update should update any profile", async () => {
+            const profileId = testProfiles[testUsers[0].id];
+            const updateLastName = "FoobarAdmin";
+
+            const profile = await adminProfileService.update(profileId, {
+                last_name: updateLastName
+            });
+            const { data: expectedProfile } = await supabaseClient
+                .from("profiles")
+                .select()
+                .eq("id", profileId)
+                .single();
+            expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("an admin can create a login-less profile through an authenticated client", async () => {
+            expect.assertions(2);
+
+            // cast as Profile here so we can omit id and have an auto-generated id
+            // using id: undefined seems to still try to set it to null
+            const profile = await adminProfileService.insert({
+                uid: null,
+                name: "Login-less Profile",
+                email: `PROFILE_SERVICE_TEST_NOLOGIN_ADMIN_${Date.now()}@example.com`,
+                phone: "",
+                roles: [""],  // needs to be a string[]
+                waiver_accepted: false
+            } as Profile);
+
+            expect(profile.id).not.toBeNull();
+            expect(profile.uid).toBeNull();
+        });
+
+        test("getById and update work on a login-less profile", async () => {
+            expect.assertions(2);
+
+            const profile = await createLoginlessProfile("GETUPDATE");
+
+            const fetched = await adminProfileService.getById(profile.id);
+            expect(fetched?.uid).toBeNull();
+
+            const updated = await adminProfileService.update(profile.id, { last_name: "Loginless" });
+            expect(updated.last_name).toEqual("Loginless");
+        });
+
+        test("email is editable on a login-less profile", async () => {
+            expect.assertions(1);
+
+            const profile = await createLoginlessProfile("EMAIL");
+            const newEmail = `PROFILE_SERVICE_TEST_NOLOGIN_EMAIL_UPDATED_${Date.now()}@example.com`;
+
+            const updated = await adminProfileService.update(profile.id, { email: newEmail });
+            expect(updated.email).toEqual(newEmail);
+        });
     });
 
-    test("updateWaiverAccepted should return null if profile not found", async () => {
-        expect.assertions(1);
-        const nonExistentId = "00000000-0000-0000-0000-000000000000";
-        expect(await profilesService.updateWaiverAccepted(nonExistentId, true)).toBeNull();
-    });
+    describe("as a non-admin user", () => {
+        let nonAdminUser: User;
+        let nonAdminProfileId: Identifier;
+        let supabaseClient: SupabaseClient;
+        let nonAdminProfileService: ProfilesService;
 
-    test("updateWaiverAccepted should raise an error on any database error", async () => {
-        expect.assertions(1);
-        const badId = "invalid-uuid";
-        await expect(profilesService.updateWaiverAccepted(badId, true)).rejects.toThrow(DatabaseError);
+        beforeAll(async () => {
+            nonAdminUser = await createTestUser("_ZZZmember", ["member"]);
+            supabaseClient = createClient(
+                "http://localhost:54321",
+                process.env.VITE_SUPABASE_ANON_KEY || "undefined"
+            );
+
+            await supabaseClient.auth.signInWithPassword({email: nonAdminUser.email!, password: "password"});
+            nonAdminProfileService = new ProfilesService(new ProfilesDao(
+                supabaseClient,
+                "profiles",
+                { select: "*" }
+            ));
+
+            const { data } = await supabaseClient
+                .from("profiles")
+                .select("id")
+                .eq("uid", nonAdminUser.id)
+                .single();
+
+            nonAdminProfileId = data?.id
+        });
+
+        test("getById should return a profile", async () => {
+            expect.assertions(1);
+
+            const profileId = testProfiles[testUsers[0].id];
+
+            const profile = await nonAdminProfileService.getById(profileId);
+            const { data: expectedProfile } = await supabaseClient
+                .from("profiles")
+                .select()
+                .eq("id", profileId)
+                .single();
+            expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("update should update own profile", async () => {
+            const updateLastName = "NonAdmin"
+
+            const profile = await nonAdminProfileService.update(nonAdminProfileId, {
+                last_name: updateLastName
+            });
+            const { data: expectedProfile } = await supabaseClient
+                .from("profiles")
+                .select()
+                .eq("uid", nonAdminUser.id)
+                .single();
+            expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("update should fail on another profile", async () => {
+            const profileId = testProfiles[testUsers[0].id];
+            await expect(nonAdminProfileService.update(profileId, { name: "Fail" })).rejects.toThrow(Error);
+        });
+
+        test("cannot escalate own roles via update", async () => {
+            expect.assertions(2);
+
+            const updated = await nonAdminProfileService.update(nonAdminProfileId, {
+                last_name: "Escalated",
+                roles: ["admin"],
+            });
+
+            expect(updated.last_name).toEqual("Escalated");
+            expect(updated.roles).not.toContain("admin");
+        });
+
+        test("cannot update a login-less profile", async () => {
+            expect.assertions(1);
+
+            const profile = await createLoginlessProfile("PRIVBOUNDARY");
+
+            await expect(
+                nonAdminProfileService.update(profile.id, { last_name: "Hacked" })
+            ).rejects.toThrow(Error);
+        });
+
+        test("cannot insert a profile", async () => {
+            expect.assertions(1);
+
+            const { error } = await supabaseClient
+                .from("profiles")
+                .insert({
+                    email: `PROFILE_SERVICE_TEST_NOLOGIN_DENY_${Date.now()}@example.com`,
+                    name: "Should Not Insert",
+                });
+
+            expect(error).not.toBeNull();
+        });
+
+        test("cannot delete a profile", async () => {
+            expect.assertions(1);
+
+            const targetId = testProfiles[testUsers[0].id];
+
+            await supabaseClient
+                .from("profiles")
+                .delete()
+                .eq("id", targetId);
+
+            const { data: stillThere } = await serviceRoleClient
+                .from("profiles")
+                .select("id")
+                .eq("id", targetId)
+                .single();
+
+            expect(stillThere).not.toBeNull();
+        });
     });
 });

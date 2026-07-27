@@ -7,9 +7,6 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade
 );
 
--- no grants for anon
-grant select, update on public.profiles to service_role, authenticated;
-
 alter table public.profiles
   add column if not exists name text,
   add column if not exists first_name text,

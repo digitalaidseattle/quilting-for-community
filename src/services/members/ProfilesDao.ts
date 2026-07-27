@@ -5,12 +5,11 @@
  *
  */
 
-import { DataAccessOptions, Entity, Identifier } from "@digitalaidseattle/core";
+import { DataAccessOptions, Entity, Identifier, QueryModel } from "@digitalaidseattle/core";
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { DatabaseError, EntityNotFoundError, UnimplementedError } from "../../utils/exceptions";
 
 export type Profile = Entity & {
+    uid: string | null;
     name: string;
     first_name?: string;
     last_name?: string;
@@ -20,111 +19,49 @@ export type Profile = Entity & {
     waiver_accepted: boolean;
 }
 
-export type ProfilesDaoGetAllOptions = DataAccessOptions<Profile> & {
-    start?: number;
-    sort?: { [k in keyof Profile]?: "asc" | "desc" };  // could narrow this if needed
-}
-
-type SupabaseProfileDatabase = {
-    Row: Profile;
-    Update: Partial<Profile>;
-}
+// Partial<Profile> but id is required
+export type UpsertProfile = Partial<Profile> & Pick<Profile, "id">;
 
 const DEFAULT_SELECT = '*';
 
 export class ProfilesDao extends SupabaseDAO<Profile> {
     private static instance: ProfilesDao;
 
-    static getInstance(supabaseClient?: SupabaseClient) {
+    static getInstance() {
         if (!ProfilesDao.instance) {
-            ProfilesDao.instance = new ProfilesDao(supabaseClient || SupabaseConfiguration.getInstance().getSupabaseClient(), 'profiles', { select: DEFAULT_SELECT });
+            ProfilesDao.instance = new ProfilesDao(SupabaseConfiguration.getInstance().getSupabaseClient(), 'profiles', { select: DEFAULT_SELECT });
         }
         return ProfilesDao.instance;
     }
 
-    async getAll(opts?: ProfilesDaoGetAllOptions): Promise<Profile[]> {
-        const query = this.client
-            .from<string, SupabaseProfileDatabase>(this.tableName)
-            .select()
+    override upsert(entity: UpsertProfile, opts?: DataAccessOptions<Profile> | undefined): Promise<Profile> {
+        return super.upsert(entity as Profile, opts);
+    }
 
-        const limit = opts?.count || 25;
-        const start = opts?.start || 0;
-        query.range(start, start + limit - 1);
+    async getByUid(uid: Identifier): Promise<Profile | null> {
+        const query: QueryModel = {
+            page: 0,
+            pageSize: 1,  // expecting one result
+            sortField: "created_at",
+            sortDirection: "asc",
+            filterModel: {
+                items: [
+                    {
+                        field: "uid",
+                        operator: "=",
+                        value: uid
+                    }
+                ]
+            },
+        };
 
-        if (opts?.sort) {
-            for (const [key, direction] of Object.entries(opts.sort)) {
-                query.order(key, { ascending: direction === 'asc' });
-            }
-        } else {
-            // default to email sort
-            query.order('email', { ascending: true });
+        try {
+            const { rows } = await this.find(query);
+
+            return rows && rows.length > 0 ? rows[0] : null;
+        } catch (err) {
+            console.log("getByUid error: ", err);
+            throw err;
         }
-
-        const { data, error } = await query;
-
-        if (error) {
-            throw new DatabaseError('Error fetching profiles', { cause: error });
-        }
-
-        return data;
-    }
-
-    async getById(id: Identifier): Promise<Profile> {
-        const { data, error } = await this.client
-            .from<string, SupabaseProfileDatabase>(this.tableName)
-            .select()
-            .eq('id', id)
-            .limit(1)
-            .maybeSingle();
-
-        if (error) {
-            throw new DatabaseError(`Error fetching profile ${id}`, { cause: error });
-        }
-
-        if (!data) {
-            throw new EntityNotFoundError('Profile', id);
-        }
-
-        return data;
-    }
-
-    async updateWaiverAccepted(id: Identifier, accepted: boolean): Promise<Profile> {
-        const { data, error } = await this.client
-            .from<string, SupabaseProfileDatabase>(this.tableName)
-            .update({ waiver_accepted: accepted })
-            .eq('id', id)
-            .limit(1)
-            .select()
-            .maybeSingle();
-
-        if (error) {
-            throw new DatabaseError(`Error updating profile ${id}`, { cause: error });
-        }
-
-        if (!data) {
-            throw new EntityNotFoundError('Profile', id);
-        }
-
-        return data;
-    }
-
-    override insert(): never {
-        throw new UnimplementedError("Write operations on Profiles not allowed");
-    }
-
-    override update(): never {
-        throw new UnimplementedError("Write operations on Profiles not allowed");
-    }
-
-    override batchInsert(): never {
-        throw new UnimplementedError("Write operations on Profiles not allowed");
-    }
-
-    override delete(): never {
-       throw new UnimplementedError("Write operations on Profiles not allowed"); 
-    }
-
-    override upsert(): never {
-        throw new UnimplementedError("Write operations on Profiles not allowed");
     }
 }
