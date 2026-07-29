@@ -3,10 +3,10 @@
 -- Table Definition
 create table public.product_history (
 id uuid primary key default gen_random_uuid(),
-product_id uuid NOT NULL REFERENCES public.products ON DELETE CASCADE,
+product_id uuid not null references public.products on delete cascade,
 change_date timestamptz not null default now(),
 sale_price decimal(10,2),
-regular_price decimal(10,2) NOT NULL,
+regular_price decimal(10,2) not null,
 created_at timestamptz not null default now(),
 created_by text,
 updated_at timestamptz not null default now(),
@@ -23,15 +23,15 @@ create index products_history_regular_price_idx on public.product_history(regula
 create index product_history_product_date_idx on public.product_history(product_id, change_date desc);
 
 -- Constraints and Triggers
-ALTER TABLE public.product_history
-ADD CONSTRAINT product_history_regular_price_non_negative
-CHECK (regular_price >= 0);
+alter table public.product_history
+add constraint product_history_regular_price_non_negative
+check (regular_price >= 0);
 
-ALTER TABLE public.product_history
-ADD CONSTRAINT product_history_sale_price_valid
-CHECK (
-    sale_price IS NULL
-    OR (sale_price >= 0 AND sale_price <= regular_price)
+alter table public.product_history
+add constraint product_history_sale_price_valid
+check (
+    sale_price is null
+    or (sale_price >= 0 and sale_price <= regular_price)
 );
 
 create or replace trigger products_set_audit_fields
