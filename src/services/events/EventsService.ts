@@ -147,6 +147,7 @@ export class EventsService {
             template: false,
             status: overrides.status ?? 'draft',
             name: overrides.name ?? `${source.name} (copy)`,
+            photo_path: overrides.photo_path ?? '',
             event_sessions: (event_sessions ?? []).map((session) => {
                 const { id: _sessionId, created_at: _ca, updated_at: _ua, ...sessionRest } = session;
                 return {

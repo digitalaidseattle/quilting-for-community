@@ -11,6 +11,7 @@ export type Event = Entity & {
     description: string;
     notes: string;
     category: string;
+    photo_path: string;
     duration: number;
     max_seats: number;
     volunteer_seat_count: number;

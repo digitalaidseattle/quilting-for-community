@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useContext, useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { HomeOutlined, PlusOutlined } from "@ant-design/icons";
@@ -25,13 +25,14 @@ import {
     InputAdornment,
     Link,
     MenuItem,
+    Paper,
     Stack,
     TextField,
     Typography,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
-import { LoadingContext, QueryModel } from "@digitalaidseattle/core";
+import { LoadingContext, QueryModel, useStorageService } from "@digitalaidseattle/core";
 import { EventCategorySelect } from "../../components/EventCategorySelect";
 import { NumberField } from "../../components/NumberField";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
@@ -50,6 +51,11 @@ import {
     utcIsoToWallDate,
     wallDateToUtcIso,
 } from "../../utils/date-format";
+
+function safePhotoFileName(fileName: string): string {
+    const cleaned = fileName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+    return cleaned || 'photo';
+}
 
 const TEMPLATES_QUERY: QueryModel = {
     page: 0,
@@ -128,6 +134,7 @@ function applyStartAndDuration(
 export const AdminEventPage = () => {
     const service = EventsService.getInstance();
     const profilesService = ProfilesService.getInstance();
+    const storageService = useStorageService();
     const { setLoading } = useContext(LoadingContext);
     const navigate = useNavigate();
     const { id } = useParams();
@@ -142,6 +149,10 @@ export const AdminEventPage = () => {
     const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
     const [instructorOptions, setInstructorOptions] = useState<Profile[]>([]);
     const [confirmDelete, setConfirmDelete] = useState<{ type: 'event' } | { type: 'session', session: EventSession } | null>(null);
+    const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+    const [photoMarkedForRemoval, setPhotoMarkedForRemoval] = useState(false);
+    const [photoPreviewUrl, setPhotoPreviewUrl] = useState('');
+    const [persistedPhotoPath, setPersistedPhotoPath] = useState('');
     const loadingEvent = !isNew && !notFound && loadedId !== id;
 
     const {
@@ -197,6 +208,40 @@ export const AdminEventPage = () => {
         storeTimezone(next);
     }
 
+    function clearPendingPhotoChange() {
+        setSelectedPhotoFile(null);
+        setPhotoMarkedForRemoval(false);
+    }
+
+    function handlePhotoFileChange(e: ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) {
+            return;
+        }
+        if (!file.type.startsWith('image/')) {
+            return;
+        }
+        setSelectedPhotoFile(file);
+        setPhotoMarkedForRemoval(false);
+        e.target.value = '';
+    }
+
+    function handleRemovePhoto() {
+        setSelectedPhotoFile(null);
+        setPhotoMarkedForRemoval(true);
+        setValue('photo_path', '', { shouldDirty: true });
+    }
+
+    /** Delete a photo only if it belongs to this event. */
+    async function deleteOwnedPhoto(path: string, eventId: string) {
+        if (!storageService || !path) return;
+        const owned =
+            path.startsWith(`events/${eventId}/`)
+            || /^events\/[^/]+$/.test(path);
+        if (!owned) return;
+        await storageService.removeFile(path).catch(() => undefined);
+    }
+
     useEffect(() => {
         profilesService.getInstructorCandidates()
             .then(setInstructorOptions)
@@ -215,16 +260,24 @@ export const AdminEventPage = () => {
             setNotFound(false);
             setLoadedId(undefined);
             reset(EventsDao.empty());
+            clearPendingPhotoChange();
+            setPersistedPhotoPath('');
             setSessionDialogOpen(false);
             setConfirmDelete(null);
             return;
         }
 
         let cancelled = false;
+        // Keep a pending file when /new becomes /:id after saving a session.
+        // Clear only when switching between two existing events.
+        if (loadedId != null && loadedId !== id) {
+            clearPendingPhotoChange();
+        }
         setNotFound(false);
         setLoadedId(undefined);
         setLoading(true);
         reset(EventsDao.empty());
+        setPersistedPhotoPath('');
         setSessionDialogOpen(false);
         setConfirmDelete(null);
 
@@ -235,6 +288,7 @@ export const AdminEventPage = () => {
             if (full) {
                 setNotFound(false);
                 reset(full);
+                setPersistedPhotoPath(full.photo_path ?? '');
                 setLoadedId(id);
             } else {
                 setNotFound(true);
@@ -254,6 +308,21 @@ export const AdminEventPage = () => {
             setLoading(false);
         };
     }, [id, isNew, reset, service, setLoading]);
+
+    useEffect(() => {
+        if (selectedPhotoFile) {
+            const objectUrl = URL.createObjectURL(selectedPhotoFile);
+            setPhotoPreviewUrl(objectUrl);
+            return () => URL.revokeObjectURL(objectUrl);
+        }
+
+        if (photoMarkedForRemoval || !event.photo_path || !storageService) {
+            setPhotoPreviewUrl('');
+            return;
+        }
+
+        setPhotoPreviewUrl(storageService.getUrl(event.photo_path));
+    }, [selectedPhotoFile, photoMarkedForRemoval, event.photo_path, storageService]);
 
     // Calendar clicks land here with ?session=<id>
     const initialSessionId = searchParams.get('session');
@@ -279,14 +348,53 @@ export const AdminEventPage = () => {
             ...rest,
             template: false,
             name: `${template.name} (copy)`,
+            photo_path: '',
             event_sessions: getValues('event_sessions'),
         } as Event);
+        clearPendingPhotoChange();
+        setPersistedPhotoPath('');
     }
 
     async function onSaveEvent(values: Event) {
+        if (!storageService && selectedPhotoFile) {
+            return;
+        }
+
         setLoading(true);
+        const previousPhotoPath = persistedPhotoPath;
         try {
-            await service.save(values);
+            let nextValues = values;
+
+            if (selectedPhotoFile) {
+                let eventId = values.id as string | undefined;
+                if (!eventId) {
+                    const created = await service.save({ ...values, photo_path: '' });
+                    eventId = created.id as string;
+                    nextValues = {
+                        ...values,
+                        id: eventId,
+                        event_sessions: created.event_sessions,
+                    };
+                }
+
+                const path = `events/${eventId}/${crypto.randomUUID()}-${safePhotoFileName(selectedPhotoFile.name)}`;
+                await storageService!.upload(path, selectedPhotoFile);
+                nextValues = { ...nextValues, photo_path: path };
+            } else if (photoMarkedForRemoval) {
+                nextValues = { ...nextValues, photo_path: '' };
+            }
+
+            const saved = await service.save(nextValues);
+
+            if (
+                (selectedPhotoFile || photoMarkedForRemoval)
+                && previousPhotoPath
+                && previousPhotoPath !== saved.photo_path
+                && saved.id
+            ) {
+                await deleteOwnedPhoto(previousPhotoPath, saved.id as string);
+            }
+
             navigate('/admin/event-management');
         } finally {
             setLoading(false);
@@ -397,6 +505,7 @@ export const AdminEventPage = () => {
             setLoading(true);
             try {
                 await service.delete(event.id);
+                await deleteOwnedPhoto(persistedPhotoPath, event.id as string);
                 setConfirmDelete(null);
                 navigate('/admin/event-management');
             } finally {
@@ -553,133 +662,204 @@ export const AdminEventPage = () => {
                                 />
                             )}
                         />
-                        <Stack direction="row" spacing={2} alignItems="flex-start">
-                            <Controller
-                                name="description"
-                                control={control}
-                                render={({ field }) => (
-                                    <TextField
-                                        {...field}
-                                        label="Description"
-                                        multiline
-                                        rows={3}
-                                        slotProps={{ inputLabel: { shrink: Boolean(field.value) } }}
-                                        sx={{ flex: 1 }}
-                                    />
-                                )}
-                            />
-                            <Controller
-                                name="notes"
-                                control={control}
-                                render={({ field }) => (
-                                    <TextField
-                                        {...field}
-                                        label="Notes"
-                                        placeholder="Internal Notes"
-                                        multiline
-                                        rows={3}
-                                        slotProps={{ inputLabel: { shrink: Boolean(field.value) } }}
-                                        sx={{ flex: 1 }}
-                                    />
-                                )}
-                            />
-                        </Stack>
-                        <Controller
-                            name="category"
-                            control={control}
-                            render={({ field }) => (
-                                <EventCategorySelect
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                />
-                            )}
-                        />
-                        <Stack direction="row" spacing={2} alignItems="flex-start">
-                            <Stack direction="row" spacing={2} sx={{ flex: 1 }}>
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gap: 2,
+                                gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 240px' },
+                                alignItems: 'stretch',
+                            }}
+                        >
+                            <Stack spacing={2} sx={{ minWidth: 0 }}>
                                 <Controller
-                                    name="status"
+                                    name="description"
                                     control={control}
                                     render={({ field }) => (
                                         <TextField
-                                            select
-                                            label="Status"
-                                            value={field.value}
-                                            onChange={field.onChange}
-                                            sx={{ flex: 1 }}
-                                        >
-                                            <MenuItem value="draft">Draft</MenuItem>
-                                            <MenuItem value="published">Published</MenuItem>
-                                            <MenuItem value="cancelled">Cancelled</MenuItem>
-                                        </TextField>
-                                    )}
-                                />
-                                <Controller
-                                    name="duration"
-                                    control={control}
-                                    render={({ field, fieldState }) => (
-                                        <NumberField
-                                            label="Default duration (minutes)"
-                                            value={field.value}
-                                            onChange={field.onChange}
-                                            min={1}
-                                            error={Boolean(fieldState.error)}
-                                            helperText={fieldState.error?.message ?? 'Used when adding new sessions'}
-                                            sx={{ flex: 1 }}
+                                            {...field}
+                                            label="Description"
+                                            multiline
+                                            minRows={4}
+                                            slotProps={{ inputLabel: { shrink: Boolean(field.value) } }}
+                                            fullWidth
                                         />
                                     )}
                                 />
                                 <Controller
-                                    name="price"
+                                    name="notes"
                                     control={control}
-                                    render={({ field, fieldState }) => (
-                                        <NumberField
-                                            label="Price"
-                                            value={field.value}
-                                            onChange={field.onChange}
-                                            min={0}
-                                            error={Boolean(fieldState.error)}
-                                            helperText={fieldState.error?.message}
-                                            sx={{ flex: 1 }}
-                                            InputProps={{
-                                                startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                                            }}
+                                    render={({ field }) => (
+                                        <TextField
+                                            {...field}
+                                            label="Internal notes"
+                                            multiline
+                                            minRows={3}
+                                            slotProps={{ inputLabel: { shrink: Boolean(field.value) } }}
+                                            fullWidth
                                         />
                                     )}
                                 />
                             </Stack>
-                            <Stack direction="row" spacing={2} sx={{ flex: 1 }}>
-                                <Controller
-                                    name="max_seats"
-                                    control={control}
-                                    render={({ field, fieldState }) => (
-                                        <NumberField
-                                            label="Max seats"
-                                            value={field.value}
-                                            onChange={field.onChange}
-                                            min={1}
-                                            error={Boolean(fieldState.error)}
-                                            helperText={fieldState.error?.message}
-                                            sx={{ flex: 1 }}
+                            <Stack spacing={1} sx={{ minWidth: 0 }}>
+                                {photoPreviewUrl ? (
+                                    <Box
+                                        component="img"
+                                        src={photoPreviewUrl}
+                                        alt={event.name ? `${event.name} event photo` : 'Event photo preview'}
+                                        sx={{
+                                            width: '100%',
+                                            height: 'auto',
+                                            maxHeight: { xs: 320, md: 360 },
+                                            objectFit: 'contain',
+                                            display: 'block',
+                                            bgcolor: 'action.hover',
+                                            border: 1,
+                                            borderColor: 'divider',
+                                            borderRadius: 1,
+                                        }}
+                                    />
+                                ) : (
+                                    <Paper
+                                        variant="outlined"
+                                        sx={{
+                                            height: 160,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            bgcolor: 'action.hover',
+                                            color: 'text.secondary',
+                                        }}
+                                    >
+                                        <Typography variant="caption">No photo</Typography>
+                                    </Paper>
+                                )}
+                                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                                    <Button component="label" size="small" variant="outlined">
+                                        {photoPreviewUrl ? 'Replace' : 'Upload'}
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            hidden
+                                            onChange={handlePhotoFileChange}
                                         />
+                                    </Button>
+                                    {photoPreviewUrl && (
+                                        <Button size="small" color="error" onClick={handleRemovePhoto}>
+                                            Remove
+                                        </Button>
                                     )}
-                                />
-                                <Controller
-                                    name="volunteer_seat_count"
-                                    control={control}
-                                    render={({ field, fieldState }) => (
-                                        <NumberField
-                                            label="Volunteer seats"
-                                            value={field.value}
-                                            onChange={field.onChange}
-                                            min={0}
-                                            error={Boolean(fieldState.error)}
-                                            helperText={fieldState.error?.message}
-                                            sx={{ flex: 1 }}
-                                        />
-                                    )}
-                                />
+                                </Stack>
+                                {selectedPhotoFile && (
+                                    <Typography variant="caption" color="text.secondary">
+                                        Selected: {selectedPhotoFile.name} (saved with event)
+                                    </Typography>
+                                )}
                             </Stack>
-                        </Stack>
+                        </Box>
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gap: 2,
+                                gridTemplateColumns: {
+                                    xs: '1fr',
+                                    sm: 'repeat(2, minmax(0, 1fr))',
+                                    md: 'repeat(3, minmax(0, 1fr))',
+                                    lg: 'repeat(6, minmax(0, 1fr))',
+                                },
+                            }}
+                        >
+                            <Controller
+                                name="status"
+                                control={control}
+                                render={({ field }) => (
+                                    <TextField
+                                        select
+                                        label="Status"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        fullWidth
+                                    >
+                                        <MenuItem value="draft">Draft</MenuItem>
+                                        <MenuItem value="published">Published</MenuItem>
+                                        <MenuItem value="cancelled">Cancelled</MenuItem>
+                                    </TextField>
+                                )}
+                            />
+                            <Controller
+                                name="category"
+                                control={control}
+                                render={({ field }) => (
+                                    <EventCategorySelect
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        sx={{ width: '100%' }}
+                                    />
+                                )}
+                            />
+                            <Controller
+                                name="duration"
+                                control={control}
+                                render={({ field, fieldState }) => (
+                                    <NumberField
+                                        label="Duration (min)"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        min={1}
+                                        error={Boolean(fieldState.error)}
+                                        helperText={fieldState.error?.message}
+                                        fullWidth
+                                    />
+                                )}
+                            />
+                            <Controller
+                                name="price"
+                                control={control}
+                                render={({ field, fieldState }) => (
+                                    <NumberField
+                                        label="Price"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        min={0}
+                                        error={Boolean(fieldState.error)}
+                                        helperText={fieldState.error?.message}
+                                        fullWidth
+                                        InputProps={{
+                                            startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                                        }}
+                                    />
+                                )}
+                            />
+                            <Controller
+                                name="max_seats"
+                                control={control}
+                                render={({ field, fieldState }) => (
+                                    <NumberField
+                                        label="Max seats"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        min={1}
+                                        error={Boolean(fieldState.error)}
+                                        helperText={fieldState.error?.message}
+                                        fullWidth
+                                    />
+                                )}
+                            />
+                            <Controller
+                                name="volunteer_seat_count"
+                                control={control}
+                                render={({ field, fieldState }) => (
+                                    <NumberField
+                                        label="Volunteer seats"
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        min={0}
+                                        error={Boolean(fieldState.error)}
+                                        helperText={fieldState.error?.message}
+                                        fullWidth
+                                    />
+                                )}
+                            />
+                        </Box>
                         <Controller
                             name="template"
                             control={control}
