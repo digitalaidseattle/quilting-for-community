@@ -40,12 +40,13 @@ export class EventsService {
         if (event_sessions) {
             const existing = event.id ? await this.sessions.getByEventId(saved.id as string) : [];
             const keptIds = new Set(event_sessions.map((session) => session.id));
+            const named = this.withDefaultNames(saved, event_sessions);
 
             await Promise.all([
                 ...existing
                     .filter((session) => !keptIds.has(session.id))
                     .map((session) => this.sessions.delete(session.id as string)),
-                ...event_sessions.map((session) => this.sessions.upsert({
+                ...named.map((session) => this.sessions.upsert({
                     ...session,
                     event_id: saved.id as string,
                 })),
@@ -53,6 +54,22 @@ export class EventsService {
         }
 
         return await this.getById(saved.id as string) as Event;
+    }
+
+    // Blank session names are materialized at save time: a lone session takes
+    // the event's name; parts of a multi-session class get "(Part n)" by date.
+    private withDefaultNames(event: Event, sessions: EventSession[]): EventSession[] {
+        if (sessions.length === 1) {
+            return sessions.map((session) => ({
+                ...session,
+                name: session.name || event.name,
+            }));
+        }
+        const ordered = [...sessions].sort((a, b) => a.start_at.localeCompare(b.start_at));
+        return sessions.map((session) => ({
+            ...session,
+            name: session.name || `${event.name} (Part ${ordered.indexOf(session) + 1})`,
+        }));
     }
 
     async delete(id: Identifier): Promise<void> {
@@ -88,6 +105,7 @@ export class EventsService {
 
         return {
             event_id: event.id as string,
+            name: overrides.name ?? '',
             start_at: start,
             end_at: end,
             max_seats: overrides.max_seats ?? null,

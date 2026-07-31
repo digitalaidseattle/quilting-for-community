@@ -68,7 +68,7 @@ export const EventCalendar = ({
     const calendarEvents = useMemo<CalendarEvent[]>(() => events.flatMap((event) =>
         (event.event_sessions ?? []).map((session) => ({
             id: session.id as string,
-            title: event.name,
+            title: session.name || event.name,
             start: utcIsoToWallDate(session.start_at, timeZone),
             end: utcIsoToWallDate(session.end_at, timeZone),
             resource: { session, event },
@@ -163,7 +163,7 @@ export const EventCalendar = ({
                     })}
                     tooltipAccessor={(calEvent) => {
                         const { session, event } = calEvent.resource;
-                        return `${event.name} · ${formatSessionDate(session.start_at, timeZone)} (${session.status})`;
+                        return `${session.name || event.name} · ${formatSessionDate(session.start_at, timeZone)} (${session.status})`;
                     }}
                 />
             </Box>

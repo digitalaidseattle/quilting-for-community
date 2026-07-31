@@ -76,6 +76,17 @@ export const EventDialog = ({
 
     const sessions = event.event_sessions ?? [];
 
+    // Mirrors EventsService.withDefaultNames: lone sessions take the event
+    // name, parts of a multi-session class get "(Part n)" by date order.
+    function defaultSessionName(session: EventSession): string {
+        const others = sessions.filter((s) => s.id !== session.id);
+        if (others.length === 0) {
+            return event.name;
+        }
+        const ordered = [...others, session].sort((a, b) => a.start_at.localeCompare(b.start_at));
+        return `${event.name} (Part ${ordered.indexOf(session) + 1})`;
+    }
+
     function durationMinutes(session: EventSession): number {
         const startMs = new Date(session.start_at).getTime();
         const endMs = new Date(session.end_at).getTime();
@@ -86,7 +97,25 @@ export const EventDialog = ({
     }
 
     useEffect(() => {
-        setEvent(editing);
+        // Single-session events are the default: new events start with one
+        // part already in the grid, and "Add part" is the explicit action.
+        if (!editing.id && !(editing.event_sessions?.length)) {
+            const startWall = nowAsWallDate(timeZone);
+            const duration = editing.duration || 60;
+            const endWall = new Date(startWall.getTime() + duration * 60000);
+            setEvent({
+                ...editing,
+                event_sessions: [{
+                    ...service.sessionFromEvent(editing, {
+                        start_at: wallDateToUtcIso(startWall, timeZone),
+                        end_at: wallDateToUtcIso(endWall, timeZone),
+                    }),
+                    id: crypto.randomUUID(),
+                }],
+            });
+        } else {
+            setEvent(editing);
+        }
         setSelectedTemplateId('');
         // In session-only mode the calendar already has current session times;
         // refetching can briefly race a just-finished drag and show stale times.
@@ -220,7 +249,10 @@ export const EventDialog = ({
         if (sessionOnly) {
             setLoading(true);
             try {
-                await EventSessionsService.getInstance().upsert(normalized);
+                await EventSessionsService.getInstance().upsert({
+                    ...normalized,
+                    name: normalized.name || defaultSessionName(normalized),
+                });
                 onSaved();
                 onClose();
             } finally {
@@ -272,6 +304,12 @@ export const EventDialog = ({
     }
 
     const sessionColumns = [
+        {
+            field: 'name',
+            headerName: 'Name',
+            flex: 1,
+            valueGetter: (_: unknown, row: EventSession) => row.name || defaultSessionName(row),
+        },
         {
             field: 'start_at',
             headerName: 'Start',
@@ -355,7 +393,7 @@ export const EventDialog = ({
                                 <Stack direction="row" spacing={1} alignItems="center">
                                     <TimezoneSelect value={timeZone} onChange={onTimeZoneChange} />
                                     <Button size="small" startIcon={<PlusOutlined />} onClick={openNewSession}>
-                                        Add session
+                                        Add part
                                     </Button>
                                 </Stack>
                             </Stack>
@@ -390,6 +428,14 @@ export const EventDialog = ({
                 <DialogContent>
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <Stack spacing={2} sx={{ mt: 1 }}>
+                            <TextField
+                                label="Name"
+                                value={editingSession.name}
+                                onChange={(e) => setEditingSession({ ...editingSession, name: e.target.value })}
+                                placeholder={defaultSessionName(editingSession)}
+                                helperText="Leave blank to use the default name"
+                                fullWidth
+                            />
                             <TimezoneSelect value={timeZone} onChange={onTimeZoneChange} fullWidth />
                             <DateTimePicker
                                 label="Start"
