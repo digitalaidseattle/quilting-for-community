@@ -22,9 +22,9 @@ import { Profile } from "../services/members/ProfilesDao";
 
 // Dummy dataset matching the IDs from MembersPage
 const DUMMY_PROFILES: Record<string, Profile & { role?: string; joinedDate?: string }> = {
-  '1': { id: '1', name: 'Alex Johnson', email: 'alex.johnson@example.com', joinedDate: 'Jan 2025' },
-  '2': { id: '2', name: 'Sam Taylor', email: 'sam.taylor@example.com', joinedDate: 'Mar 2025' },
-  '3': { id: '3', name: 'Jordan Lee', email: 'jordan.lee@example.com', joinedDate: 'Nov 2024' },
+  '1': { id: '1', name: 'John Doe', email: 'john.doe@example.com', joinedDate: 'Jan 2025' },
+  '2': { id: '2', name: 'Example User', email: 'example.user@example.com', joinedDate: 'Mar 2025' },
+  '3': { id: '3', name: 'Place Holder', email: 'place.holder@example.com', joinedDate: 'Nov 2024' },
 };
 
 export const ProfilePage = () => {
@@ -65,9 +65,6 @@ export const ProfilePage = () => {
                 </Typography>
                 <Typography variant="body1">
                   <strong>Email:</strong> {profile.email}
-                </Typography>
-                <Typography variant="body1">
-                  <strong>Role:</strong> {profile.role}
                 </Typography>
                 <Typography variant="body1">
                   <strong>Joined:</strong> {profile.joinedDate}

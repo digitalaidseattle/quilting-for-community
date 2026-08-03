@@ -24,9 +24,9 @@ import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
 // ==============================|| DUMMY DATA ||==============================
 
 const DUMMY_PROFILES: Profile[] = [
-  { id: '1', name: 'Alex Johnson', email: 'alex.johnson@example.com' },
-  { id: '2', name: 'Sam Taylor', email: 'sam.taylor@example.com' },
-  { id: '3', name: 'Jordan Lee', email: 'jordan.lee@example.com' },
+  { id: '1', name: 'John Doe', email: 'john.doe@example.com', joinedDate: 'Jan 2025' },
+  { id: '2', name: 'Example User', email: 'example.user@example.com', joinedDate: 'Mar 2025' },
+  { id: '3', name: 'Place Holder', email: 'place.holder@example.com', joinedDate: 'Nov 2024' },
 ] as Profile[];
 
 // ==============================|| SAMPLE PAGE ||============================== //
@@ -60,6 +60,7 @@ export const MembersPage = () => {
       rows: DUMMY_PROFILES,
       totalRowCount: DUMMY_PROFILES.length
     });
+    
     /*
     if (paginationModel && sortModel) {
       const queryModel = {
