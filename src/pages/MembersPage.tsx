@@ -23,10 +23,11 @@ import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
 
 // ==============================|| DUMMY DATA ||==============================
 
+
 const DUMMY_PROFILES: Profile[] = [
-  { id: '1', name: 'John Doe', email: 'john.doe@example.com', joinedDate: 'Jan 2025' },
-  { id: '2', name: 'Example User', email: 'example.user@example.com', joinedDate: 'Mar 2025' },
-  { id: '3', name: 'Place Holder', email: 'place.holder@example.com', joinedDate: 'Nov 2024' },
+  { id: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted:true},
+  { id: '2', name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted:true},
+  { id: '3', name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted:false},
 ] as Profile[];
 
 // ==============================|| SAMPLE PAGE ||============================== //
