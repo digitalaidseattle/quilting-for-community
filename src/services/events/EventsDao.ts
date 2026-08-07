@@ -17,6 +17,8 @@ export class EventsDao extends SupabaseDAO<Event> {
             price: 0,
             price_max: 0,
             template: false,
+            status: 'draft',
+            search_key: '',
         } as Event;
     }
 

@@ -3,7 +3,7 @@
 insert into public.events (
   id, name, description, notes, category, duration,
   max_seats, volunteer_seat_count, price_min, price, price_max,
-  template
+  template, status
 )
 values (
   'b0000000-0000-4000-8000-000000000001',
@@ -17,10 +17,11 @@ values (
   0,
   25,
   50,
-  true
+  true,
+  'published'
 ) on conflict (id) do nothing;
 
-insert into public.event_sessions (id, event_id, start_at, end_at, max_seats, status)
+insert into public.event_sessions (id, event_id, start_at, end_at, max_seats, status, description)
 values
   (
     'c0000000-0000-4000-8000-000000000001',
@@ -28,7 +29,8 @@ values
     (date_trunc('week', now()) + interval '10 days' + interval '10 hours'),
     (date_trunc('week', now()) + interval '10 days' + interval '12 hours'),
     null,
-    'published'
+    'published',
+    'Week 1: fabric prep, cutting, and basic piecing.'
   ),
   (
     'c0000000-0000-4000-8000-000000000002',
@@ -36,6 +38,7 @@ values
     (date_trunc('week', now()) + interval '17 days' + interval '10 hours'),
     (date_trunc('week', now()) + interval '17 days' + interval '12 hours'),
     8,
-    'draft'
+    'draft',
+    'Week 2: assemble a small top and finish edges.'
   )
 on conflict (id) do nothing;

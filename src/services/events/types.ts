@@ -2,6 +2,8 @@ import { Entity } from "@digitalaidseattle/core";
 
 export type SessionStatus = 'draft' | 'published' | 'cancelled';
 
+export type EventStatus = SessionStatus;
+
 export type Event = Entity & {
     name: string;
     description: string;
@@ -14,11 +16,15 @@ export type Event = Entity & {
     price: number;
     price_max: number;
     template: boolean;
+    status: EventStatus;
+    /** Denormalized name@description@category for generalized search. */
+    search_key: string;
     event_sessions?: EventSession[];
 };
 
 export type EventSession = Entity & {
     event_id: string;
+    description: string;
     start_at: string;
     end_at: string;
     max_seats: number | null;

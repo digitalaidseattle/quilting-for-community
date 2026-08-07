@@ -1,21 +1,23 @@
 import { useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { HomeOutlined, PlusOutlined } from "@ant-design/icons";
+import { HomeOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import {
     Breadcrumbs,
     Button,
     Card,
     CardContent,
     IconButton,
+    InputAdornment,
     Stack,
     Tab,
     Tabs,
+    TextField,
     Typography,
 } from "@mui/material";
 import { DataGrid, GridSortModel } from "@mui/x-data-grid";
 import dayjs from "dayjs";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
-import { LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
+import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { EventsService } from "../../services/events/EventsService";
@@ -53,6 +55,7 @@ export const AdminEventManagementPage = () => {
     const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
     const [version, setVersion] = useState(0);
     const [tab, setTab] = useState(0); // 0 = Calendar, 1 = List
+    const [search, setSearch] = useState('');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<Event>(EventsDao.empty());
     const [initialSessionId, setInitialSessionId] = useState<string | null>(null);
@@ -66,7 +69,18 @@ export const AdminEventManagementPage = () => {
         storeTimezone(next);
     }
 
-    useEffect(() => { fetchPage(); }, [paginationModel, sortModel, refresh, version]);
+    function searchFilterItems(): FilterItem[] {
+        const term = search.trim();
+        if (!term) return [];
+        return [{ field: 'search_key', operator: 'contains', value: term }];
+    }
+
+    function handleSearchChange(value: string) {
+        setSearch(value);
+        setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
+    }
+
+    useEffect(() => { fetchPage(); }, [paginationModel, sortModel, refresh, version, search]);
 
     useEffect(() => {
         service.find(TEMPLATES_QUERY, { select: '*' }).then((page) => setTemplateEvents(page.rows));
@@ -76,7 +90,7 @@ export const AdminEventManagementPage = () => {
         if (tab === 0) {
             fetchCalendarEvents();
         }
-    }, [tab, calendarRange, refresh, version]);
+    }, [tab, calendarRange, refresh, version, search]);
 
     function fetchPage() {
         const queryModel = {
@@ -84,6 +98,7 @@ export const AdminEventManagementPage = () => {
             pageSize: paginationModel.pageSize,
             sortField: sortModel.length === 0 ? 'name' : sortModel[0].field,
             sortDirection: sortModel.length === 0 ? 'asc' : sortModel[0].sort,
+            filterModel: { items: searchFilterItems() },
         } as QueryModel;
 
         setLoading(true);
@@ -102,6 +117,7 @@ export const AdminEventManagementPage = () => {
                 items: [
                     { field: 'event_sessions.start_at', operator: '>', value: calendarRange.start.toISOString() },
                     { field: 'event_sessions.start_at', operator: '<', value: calendarRange.end.toISOString() },
+                    ...searchFilterItems(),
                 ],
             },
         } as QueryModel;
@@ -201,6 +217,7 @@ export const AdminEventManagementPage = () => {
     const columns = [
         { field: 'name', headerName: 'Name', flex: 1 },
         { field: 'category', headerName: 'Category', width: 120 },
+        { field: 'status', headerName: 'Status', width: 110 },
         { field: 'max_seats', headerName: 'Seats', width: 80 },
         {
             field: 'template',
@@ -236,7 +253,23 @@ export const AdminEventManagementPage = () => {
                         <Tab label="Calendar" />
                         <Tab label="List" />
                     </Tabs>
-                    <Stack direction="row" spacing={1} alignItems="center">
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                        <TextField
+                            size="small"
+                            placeholder="Search events…"
+                            value={search}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                            sx={{ minWidth: 220 }}
+                            slotProps={{
+                                input: {
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <SearchOutlined />
+                                        </InputAdornment>
+                                    ),
+                                },
+                            }}
+                        />
                         <TimezoneSelect value={timeZone} onChange={handleTimeZoneChange} />
                         <Button variant="contained" startIcon={<PlusOutlined />} onClick={openNew}>
                             New event
