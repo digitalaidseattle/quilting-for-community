@@ -2,27 +2,14 @@ import dayjs from "dayjs";
 
 export const DEFAULT_TIMEZONE = "America/Los_Angeles";
 
-export const TIMEZONE_OPTIONS: { value: string; label: string }[] = [
-    { value: "America/Los_Angeles", label: "Pacific (Los Angeles)" },
-    { value: "America/Denver", label: "Mountain (Denver)" },
-    { value: "America/Phoenix", label: "Arizona (Phoenix)" },
-    { value: "America/Chicago", label: "Central (Chicago)" },
-    { value: "America/New_York", label: "Eastern (New York)" },
-    { value: "UTC", label: "UTC" },
-];
-
 const STORAGE_KEY = "q4c.admin.timezone";
 
 export function loadStoredTimezone(): string {
     try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored && TIMEZONE_OPTIONS.some((option) => option.value === stored)) {
-            return stored;
-        }
+        return localStorage.getItem(STORAGE_KEY) || DEFAULT_TIMEZONE;
     } catch {
-        // ignore storage access errors (private mode, etc.)
+        return DEFAULT_TIMEZONE;
     }
-    return DEFAULT_TIMEZONE;
 }
 
 export function storeTimezone(timeZone: string): void {

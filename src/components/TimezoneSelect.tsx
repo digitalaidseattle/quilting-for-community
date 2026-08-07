@@ -1,5 +1,5 @@
 import { MenuItem, TextField, TextFieldProps } from "@mui/material";
-import { TIMEZONE_OPTIONS } from "../utils/date-format";
+import { useTimezoneOptions } from "../hooks/useTimezoneOptions";
 
 type TimezoneSelectProps = {
     value: string;
@@ -13,20 +13,25 @@ export const TimezoneSelect = ({
     onChange,
     size = "small",
     fullWidth = false,
-}: TimezoneSelectProps) => (
-    <TextField
-        select
-        label="Timezone"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        size={size}
-        fullWidth={fullWidth}
-        sx={fullWidth ? undefined : { minWidth: 220 }}
-    >
-        {TIMEZONE_OPTIONS.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-                {option.label}
-            </MenuItem>
-        ))}
-    </TextField>
-);
+}: TimezoneSelectProps) => {
+    const { options, loading } = useTimezoneOptions();
+
+    return (
+        <TextField
+            select
+            label="Timezone"
+            value={options.some((option) => option.value === value) ? value : ""}
+            onChange={(e) => onChange(e.target.value)}
+            size={size}
+            fullWidth={fullWidth}
+            disabled={loading || options.length === 0}
+            sx={fullWidth ? undefined : { minWidth: 220 }}
+        >
+            {options.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                </MenuItem>
+            ))}
+        </TextField>
+    );
+};
