@@ -15,12 +15,6 @@ updated_by text
 
 -- Indices
 create index products_history_product_id_idx on public.product_history(product_id);
-create index products_history_change_date_idx on public.product_history(change_date);
-create index products_history_sale_price_idx on public.product_history(sale_price);
-create index products_history_regular_price_idx on public.product_history(regular_price);
-
--- index to help get most recent price history of specific products
-create index product_history_product_date_idx on public.product_history(product_id, change_date desc);
 
 -- Constraints and Triggers
 alter table public.product_history
