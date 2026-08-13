@@ -17,9 +17,12 @@ import dayjs from "dayjs";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
 import { LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
+import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { EventsService } from "../../services/events/EventsService";
+import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventSession } from "../../services/events/types";
+import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
 import { EventDialog } from "./EventDialog";
 
@@ -49,11 +52,19 @@ export const AdminEventManagementPage = () => {
     const [calendarRange, setCalendarRange] = useState<CalendarRange>(initialCalendarRange);
     const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
     const [version, setVersion] = useState(0);
-    const [tab, setTab] = useState(0);
+    const [tab, setTab] = useState(0); // 0 = Calendar, 1 = List
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editing, setEditing] = useState<Event>(EventsDao.empty());
     const [initialSessionId, setInitialSessionId] = useState<string | null>(null);
+    const [initialSession, setInitialSession] = useState<EventSession | null>(null);
+    const [sessionOnly, setSessionOnly] = useState(false);
     const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
+    const [timeZone, setTimeZone] = useState(loadStoredTimezone);
+
+    function handleTimeZoneChange(next: string) {
+        setTimeZone(next);
+        storeTimezone(next);
+    }
 
     useEffect(() => { fetchPage(); }, [paginationModel, sortModel, refresh, version]);
 
@@ -62,7 +73,7 @@ export const AdminEventManagementPage = () => {
     }, [refresh, version]);
 
     useEffect(() => {
-        if (tab === 1) {
+        if (tab === 0) {
             fetchCalendarEvents();
         }
     }, [tab, calendarRange, refresh, version]);
@@ -109,20 +120,57 @@ export const AdminEventManagementPage = () => {
 
     function openNew() {
         setInitialSessionId(null);
+        setInitialSession(null);
+        setSessionOnly(false);
         setEditing(EventsDao.empty());
         setDialogOpen(true);
     }
 
     function openEdit(event: Event) {
         setInitialSessionId(null);
+        setInitialSession(null);
+        setSessionOnly(false);
         setEditing({ ...event });
         setDialogOpen(true);
     }
 
     function openSessionFromCalendar(event: Event, session: EventSession) {
+        // Pass the session object from the calendar so the dialog doesn't seed
+        // from stale EventDialog state (the dialog stays mounted across opens).
         setInitialSessionId(session.id as string);
+        setInitialSession(session);
+        setSessionOnly(true);
         setEditing({ ...event });
         setDialogOpen(true);
+    }
+
+    function openEventFromSession() {
+        setSessionOnly(false);
+    }
+
+    function closeDialog() {
+        setDialogOpen(false);
+        setSessionOnly(false);
+        setInitialSessionId(null);
+        setInitialSession(null);
+    }
+
+    async function handleSessionTimesChange(session: EventSession, startAt: string, endAt: string) {
+        setCalendarEvents((prev) => prev.map((event) => ({
+            ...event,
+            event_sessions: (event.event_sessions ?? []).map((s) =>
+                s.id === session.id ? { ...s, start_at: startAt, end_at: endAt } : s
+            ),
+        })));
+
+        try {
+            await EventSessionsService.getInstance().update(session.id as string, {
+                start_at: startAt,
+                end_at: endAt,
+            });
+        } catch {
+            refetch();
+        }
     }
 
     async function handleClone(event: Event) {
@@ -183,16 +231,32 @@ export const AdminEventManagementPage = () => {
             </Breadcrumbs>
 
             <Stack spacing={2}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1}>
                     <Tabs value={tab} onChange={(_, value) => setTab(value)}>
-                        <Tab label="List" />
                         <Tab label="Calendar" />
+                        <Tab label="List" />
                     </Tabs>
-                    <Button variant="contained" startIcon={<PlusOutlined />} onClick={openNew}>
-                        New event
-                    </Button>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <TimezoneSelect value={timeZone} onChange={handleTimeZoneChange} />
+                        <Button variant="contained" startIcon={<PlusOutlined />} onClick={openNew}>
+                            New event
+                        </Button>
+                    </Stack>
                 </Stack>
                 {tab === 0 && (
+                    <Card>
+                        <CardContent>
+                            <EventCalendar
+                                events={calendarEvents}
+                                timeZone={timeZone}
+                                onSessionSelect={openSessionFromCalendar}
+                                onSessionTimesChange={handleSessionTimesChange}
+                                onRangeChange={setCalendarRange}
+                            />
+                        </CardContent>
+                    </Card>
+                )}
+                {tab === 1 && (
                     <Card>
                         <CardContent>
                             <DataGrid
@@ -215,17 +279,6 @@ export const AdminEventManagementPage = () => {
                         </CardContent>
                     </Card>
                 )}
-                {tab === 1 && (
-                    <Card>
-                        <CardContent>
-                            <EventCalendar
-                                events={calendarEvents}
-                                onSessionSelect={openSessionFromCalendar}
-                                onRangeChange={setCalendarRange}
-                            />
-                        </CardContent>
-                    </Card>
-                )}
             </Stack>
 
             <EventDialog
@@ -233,10 +286,18 @@ export const AdminEventManagementPage = () => {
                 open={dialogOpen}
                 editing={editing}
                 templateEvents={templateEvents}
+                timeZone={timeZone}
+                onTimeZoneChange={handleTimeZoneChange}
                 initialSessionId={initialSessionId}
-                onClose={() => setDialogOpen(false)}
+                initialSession={initialSession}
+                sessionOnly={sessionOnly}
+                onOpenEventDetails={openEventFromSession}
+                onClose={closeDialog}
                 onSaved={refetch}
-                onInitialSessionOpened={() => setInitialSessionId(null)}
+                onInitialSessionOpened={() => {
+                    setInitialSessionId(null);
+                    setInitialSession(null);
+                }}
             />
 
             <ConfirmationDialog
