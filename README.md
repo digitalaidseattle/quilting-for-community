@@ -113,6 +113,14 @@ Changes are promoted along the branch flow `feature -> dev -> qa -> main`.  Each
 
 Pull request previews on Vercel point at the QA database, so a PR that adds a migration will not see its own schema change until it is merged to `dev`.  Test schema changes locally with `supabase start` first.
 
+### Local test logins
+`supabase db reset` reloads `supabase/test_data/users.sql`, which creates two throwaway accounts on the local stack so you can sign in with email/password instead of going through Google:
+
+| Email | Password | Roles |
+| --- | --- | --- |
+| `admin@example.com` | `password123` | `admin` |
+| `member@example.com` | `password123` | `participant` |
+
 ## Deployment
 The application is deployed on Vercel.  Pushes to `main` publish the production deployment. Every other branch gets a preview deployment.  Supabase environment variables are configured in the Vercel project: the Production scope points at the production Supabase project and the Preview scope points at QA.
 
