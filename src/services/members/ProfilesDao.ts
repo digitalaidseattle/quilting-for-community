@@ -5,10 +5,11 @@
  *
  */
 
-import { Entity } from "@digitalaidseattle/core";
+import { DataAccessOptions, Entity, Identifier, QueryModel } from "@digitalaidseattle/core";
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 
 export type Profile = Entity & {
+    uid: string | null;
     name: string;
     first_name?: string;
     last_name?: string;
@@ -17,6 +18,9 @@ export type Profile = Entity & {
     roles: string[];
     waiver_accepted: boolean;
 }
+
+// Partial<Profile> but id is required
+export type UpsertProfile = Partial<Profile> & Pick<Profile, "id">;
 
 const DEFAULT_SELECT = '*';
 
@@ -30,4 +34,34 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
         return ProfilesDao.instance;
     }
 
+    override upsert(entity: UpsertProfile, opts?: DataAccessOptions<Profile> | undefined): Promise<Profile> {
+        return super.upsert(entity as Profile, opts);
+    }
+
+    async getByUid(uid: Identifier): Promise<Profile | null> {
+        const query: QueryModel = {
+            page: 0,
+            pageSize: 1,  // expecting one result
+            sortField: "created_at",
+            sortDirection: "asc",
+            filterModel: {
+                items: [
+                    {
+                        field: "uid",
+                        operator: "=",
+                        value: uid
+                    }
+                ]
+            },
+        };
+
+        try {
+            const { rows } = await this.find(query);
+
+            return rows && rows.length > 0 ? rows[0] : null;
+        } catch (err) {
+            console.log("getByUid error: ", err);
+            throw err;
+        }
+    }
 }

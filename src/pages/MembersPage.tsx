@@ -19,13 +19,14 @@ import {
 import { LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/Data";
 import { Labels } from "../constants/Labels";
-import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
+import { Profile } from "../services/members/ProfilesDao";
+import { ProfilesService } from "../services/members/ProfilesService";
 
 
 // ==============================|| SAMPLE PAGE ||============================== //
 
 export const MembersPage = () => {
-  const profilesDao = ProfilesDao.getInstance();
+  const profilesService = ProfilesService.getInstance();
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
@@ -57,12 +58,12 @@ export const MembersPage = () => {
       } as QueryModel;
 
       setLoading(true);
-      profilesDao.find(queryModel)
+      profilesService.find(queryModel)
         .then((sess) => setPageInfo(sess))
         .finally(() => setLoading(false))
     }
 
-  }, [paginationModel, profilesDao, setLoading, sortModel]);
+  }, [paginationModel, profilesService, setLoading, sortModel]);
 
   useEffect(() => {
     fetchData();
