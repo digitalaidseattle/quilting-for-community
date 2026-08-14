@@ -27,4 +27,20 @@ export class ProductHistoryDao extends SupabaseDAO<ProductHistory> {
 
         return (data ?? []).map((row) => this.mapJson(row));
     }
+
+    // Get n most recent history entries for a product
+    async getMostRecentByProductId(productId: string, limit: number): Promise<ProductHistory[]> {
+        const { data, error } = await this.client
+            .from(this.tableName)
+            .select(this.select)
+            .eq('product_id', productId)
+            .order('change_date', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            throw error;
+        }
+
+        return (data ?? []).map((row) => this.mapJson(row));
+    }
 }
