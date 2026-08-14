@@ -10,32 +10,33 @@ import { HomeOutlined } from "@ant-design/icons";
 import { Breadcrumbs, Card, CardContent, IconButton, Stack, Typography } from '@mui/material';
 import {
   DataGrid,
+  GridFilterModel,
   GridRowParams,
   GridSortModel,
   useGridApiRef
 } from '@mui/x-data-grid';
 
 
-import { LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
+import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useNotifications } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/Data";
 import { Labels } from "../constants/Labels";
-import { Profile, ProfilesDao } from "../services/members/ProfilesDao";
+import { Profile } from "../services/members/ProfilesDao";
+import { ProfilesService } from "../services/members/ProfilesService";
 
 // ==============================|| DUMMY DATA ||==============================
 
 
-const DUMMY_PROFILES: Profile[] = [
-  { id: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted:true},
-  { id: '2', name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted:true},
-  { id: '3', name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted:false},
-] as Profile[];
 
 // ==============================|| SAMPLE PAGE ||============================== //
 
 export const MembersPage = () => {
-  const profilesDao = ProfilesDao.getInstance();
+  const profilesService = ProfilesService.getInstance();
+  const notifications = useNotifications();
+
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'email', sort: 'asc' }]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
+
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
   const apiRef = useGridApiRef();
   const { setLoading } = useContext(LoadingContext);
@@ -57,34 +58,46 @@ export const MembersPage = () => {
 
   // API data fetch, uncomment to replace dummy data with real data
   const fetchData = useCallback(() => {
-    setPageInfo({
-      rows: DUMMY_PROFILES,
-      totalRowCount: DUMMY_PROFILES.length
-    });
-    
-    /*
-    if (paginationModel && sortModel) {
-      const queryModel = {
-        page: paginationModel.page,
-        pageSize: paginationModel.pageSize,
-        sortField: sortModel.length === 0 ? 'created_at' : sortModel[0].field,
-        sortDirection: sortModel.length === 0 ? 'created_at' : sortModel[0].sort
-      } as QueryModel;
+    profilesService
+      .find(createQueryModel())
+      .then(data => setPageInfo(data))
+      .catch(err => {
+        notifications.error('Error fetching profiles.');
+        console.error('Error fetching profiles:', err);
+      })
+      .finally(() => setLoading(false));
 
-      setLoading(true);
-      profilesDao.find(queryModel)
-        .then((sess) => setPageInfo(sess))
-        .finally(() => setLoading(false))
-    }*/
-
-  }, [paginationModel, profilesDao, setLoading, sortModel]);
+  }, [paginationModel, profilesService, setLoading, sortModel]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData, refresh])
 
+
+  function createQueryModel(): QueryModel {
+    const filterItems: FilterItem[] = [];
+    if (filterModel && filterModel.items.length > 0) {
+      const filterItem = filterModel.items[0];
+      filterItems.push({
+        field: filterItem.field,
+        operator: filterItem.operator,
+        value: filterItem.value
+      })
+    }
+    const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
+    const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
+    return {
+      ...paginationModel,
+      sortField: sortField,
+      sortDirection: sortDirection,
+      filterModel: {
+        items: filterItems
+      }
+    } as QueryModel;
+  }
+
   function handleRowClick(params: GridRowParams<Profile>): void {
-    navigate(`/profile/${params.row.id}`)
+    navigate(`/members/${params.row.id}`)
   }
 
   return (
@@ -112,6 +125,7 @@ export const MembersPage = () => {
               rows={pageInfo.rows}
               columns={columns}
 
+              pageSizeOptions={[5, 10, 25, 100]}
               paginationMode='server'
               paginationModel={paginationModel}
               rowCount={pageInfo.totalRowCount}
@@ -121,9 +135,10 @@ export const MembersPage = () => {
               sortModel={sortModel}
               onSortModelChange={setSortModel}
 
-              pageSizeOptions={[5, 10, 25, 100]}
+              filterMode="server"
+              filterModel={filterModel}
+              onFilterModelChange={setFilterModel}
 
-              disableRowSelectionOnClick={false}
               onRowClick={handleRowClick}
             />
           </CardContent>
