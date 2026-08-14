@@ -20,6 +20,7 @@ import { ConfirmationDialog } from "@digitalaidseattle/mui";
 import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
+import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
 import { EventsService } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { EventsDao } from "../../services/events/EventsDao";
@@ -63,6 +64,7 @@ export const AdminEventManagementPage = () => {
     const [sessionOnly, setSessionOnly] = useState(false);
     const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
     const [timeZone, setTimeZone] = useState(loadStoredTimezone);
+    const { options: categoryOptions } = useEventCategoryOptions();
 
     function handleTimeZoneChange(next: string) {
         setTimeZone(next);
@@ -102,7 +104,9 @@ export const AdminEventManagementPage = () => {
         } as QueryModel;
 
         setLoading(true);
-        service.find(queryModel, { select: '*' })
+        service.find(queryModel, {
+            select: '*, instructor:profiles!instructor_id(id, name, email, first_name, last_name)',
+        })
             .then(setPageInfo)
             .finally(() => setLoading(false));
     }
@@ -216,8 +220,26 @@ export const AdminEventManagementPage = () => {
 
     const columns = [
         { field: 'name', headerName: 'Name', flex: 1 },
-        { field: 'category', headerName: 'Category', width: 120 },
         { field: 'status', headerName: 'Status', width: 110 },
+        {
+            field: 'category',
+            headerName: 'Category',
+            width: 180,
+            valueGetter: (_: unknown, row: Event) =>
+                categoryOptions.find((option) => option.value === row.category)?.label
+                ?? row.category,
+        },
+        {
+            field: 'instructor',
+            headerName: 'Instructor',
+            width: 160,
+            sortable: false,
+            valueGetter: (_: unknown, row: Event) =>
+                row.instructor?.name?.trim()
+                || [row.instructor?.first_name, row.instructor?.last_name].filter(Boolean).join(' ').trim()
+                || row.instructor?.email
+                || '',
+        },
         { field: 'max_seats', headerName: 'Seats', width: 80 },
         {
             field: 'template',

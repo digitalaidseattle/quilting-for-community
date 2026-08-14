@@ -4,24 +4,58 @@ import { TextField, TextFieldProps } from "@mui/material";
 type NumberFieldProps = Omit<TextFieldProps, 'value' | 'onChange' | 'type'> & {
     value: number;
     onChange: (value: number) => void;
+    min?: number;
+    max?: number;
 };
 
 // Handles empty fields and leading zeros. Only valid numbers are saved.
-export const NumberField = ({ value, onChange, ...props }: NumberFieldProps) => {
+export const NumberField = ({
+    value,
+    onChange,
+    min,
+    max,
+    inputProps,
+    slotProps,
+    InputProps,
+    ...props
+}: NumberFieldProps) => {
     const [text, setText] = useState(String(value));
     const [focused, setFocused] = useState(false);
 
     useEffect(() => {
         if (!focused) {
-            setText(String(value));
+            setTimeout(() => {
+                setText(String(value));
+            }, 0);
         }
     }, [value, focused]);
+
+    const incomingInputSlot =
+        slotProps && typeof slotProps.input === 'object' && slotProps.input !== null
+            ? slotProps.input
+            : undefined;
 
     return (
         <TextField
             {...props}
             type="number"
             value={text}
+            InputProps={InputProps}
+            slotProps={{
+                ...slotProps,
+                htmlInput: {
+                    min,
+                    max,
+                    ...inputProps,
+                    ...(typeof slotProps?.htmlInput === 'object' && slotProps.htmlInput !== null
+                        ? slotProps.htmlInput
+                        : undefined),
+                },
+                input: {
+                    ...incomingInputSlot,
+                    ...InputProps,
+                },
+            }}
             onFocus={(e) => {
                 setFocused(true);
                 props.onFocus?.(e);

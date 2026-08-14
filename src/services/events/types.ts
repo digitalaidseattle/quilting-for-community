@@ -3,12 +3,21 @@ import { Entity } from "@digitalaidseattle/core";
 export type SessionStatus = 'draft' | 'published' | 'cancelled';
 
 export type EventStatus = SessionStatus;
+export type EventInstructor = {
+    id: string;
+    name: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+};
 
 export type Event = Entity & {
     name: string;
     description: string;
     notes: string;
     category: string;
+    instructor_id: string | null;
+    instructor?: EventInstructor | null;
     duration: number;
     max_seats: number;
     volunteer_seat_count: number;

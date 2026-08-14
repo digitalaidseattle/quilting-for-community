@@ -7,6 +7,14 @@
 import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaidseattle/core";
 import { Profile, ProfilesDao, UpsertProfile } from "./ProfilesDao";
 
+function profileLabel(profile: Pick<Profile, 'id' | 'name' | 'email' | 'first_name' | 'last_name'>): string {
+    const name = profile.name?.trim()
+        || [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
+    return name || profile.email || String(profile.id);
+}
+
+export { profileLabel };
+
 export class ProfilesService {
 
     private static instance: ProfilesService;
@@ -26,6 +34,15 @@ export class ProfilesService {
 
     async getAll(opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
         return this.dao.getAll(opts);
+    }
+
+    /** Profiles eligible to lead an event (volunteer or admin). */
+    async getInstructorCandidates(): Promise<Profile[]> {
+        const profiles = await this.dao.getAll();
+        return profiles
+            .filter((profile) =>
+                profile.roles?.includes('volunteer') || profile.roles?.includes('admin'))
+            .sort((a, b) => profileLabel(a).localeCompare(profileLabel(b)));
     }
 
     async getById(id: Identifier): Promise<Profile> {
