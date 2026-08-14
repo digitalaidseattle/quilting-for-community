@@ -6,6 +6,11 @@ import {
     EventSession,
 } from "./types";
 
+/** Builds the denormalized search blob used for generalized event filters. */
+export function buildEventSearchKey(event: Pick<Event, 'name' | 'description' | 'category'>): string {
+    return `${event.name ?? ''}@${event.description ?? ''}@${event.category ?? ''}`;
+}
+
 // Handles both events and their sessions
 export class EventsService {
     private static instance: EventsService;
@@ -33,9 +38,13 @@ export class EventsService {
     // Inserts or updates the event and its sessions
     async save(event: Event): Promise<Event> {
         const { event_sessions, ...fields } = event;
+        const payload = {
+            ...fields,
+            search_key: buildEventSearchKey(fields),
+        };
         const saved = event.id
-            ? await this.events.update(event.id, fields)
-            : await this.events.insert(fields as Event);
+            ? await this.events.update(event.id, payload)
+            : await this.events.insert(payload as Event);
 
         if (event_sessions) {
             const existing = event.id ? await this.sessions.getByEventId(saved.id as string) : [];
@@ -69,6 +78,7 @@ export class EventsService {
             ...rest,
             ...overrides,
             template: false,
+            status: overrides.status ?? 'draft',
             name: overrides.name ?? `${source.name} (copy)`,
             event_sessions: (event_sessions ?? []).map((session) => {
                 const { id: _sessionId, created_at: _ca, updated_at: _ua, ...sessionRest } = session;
@@ -88,6 +98,7 @@ export class EventsService {
 
         return {
             event_id: event.id as string,
+            description: overrides.description ?? '',
             start_at: start,
             end_at: end,
             max_seats: overrides.max_seats ?? null,

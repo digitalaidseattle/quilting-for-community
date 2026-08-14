@@ -25,7 +25,7 @@ import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { EventsService } from "../../services/events/EventsService";
 import { EventSessionsDao } from "../../services/events/EventSessionsDao";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
-import { Event, EventSession, SessionStatus } from "../../services/events/types";
+import { Event, EventSession, EventStatus, SessionStatus } from "../../services/events/types";
 import {
     formatSessionDate,
     nowAsWallDate,
@@ -322,7 +322,20 @@ export const EventDialog = ({
                         <TextField label="Name" value={event.name} onChange={(e) => setEvent({ ...event, name: e.target.value })} fullWidth />
                         <TextField label="Description" value={event.description} onChange={(e) => setEvent({ ...event, description: e.target.value })} multiline rows={3} fullWidth />
                         <TextField label="Notes" value={event.notes} onChange={(e) => setEvent({ ...event, notes: e.target.value })} multiline rows={2} fullWidth />
-                        <TextField label="Category" value={event.category} onChange={(e) => setEvent({ ...event, category: e.target.value })} fullWidth />
+                        <Stack direction="row" spacing={2}>
+                            <TextField label="Category" value={event.category} onChange={(e) => setEvent({ ...event, category: e.target.value })} sx={{ flex: 1 }} />
+                            <TextField
+                                select
+                                label="Status"
+                                value={event.status}
+                                onChange={(e) => setEvent({ ...event, status: e.target.value as EventStatus })}
+                                sx={{ flex: 1 }}
+                            >
+                                <MenuItem value="draft">Draft</MenuItem>
+                                <MenuItem value="published">Published</MenuItem>
+                                <MenuItem value="cancelled">Cancelled</MenuItem>
+                            </TextField>
+                        </Stack>
                         <Stack direction="row" spacing={2}>
                             <NumberField
                                 label="Default duration (minutes)"
@@ -390,6 +403,14 @@ export const EventDialog = ({
                 <DialogContent>
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
                         <Stack spacing={2} sx={{ mt: 1 }}>
+                            <TextField
+                                label="Description"
+                                value={editingSession.description}
+                                onChange={(e) => setEditingSession({ ...editingSession, description: e.target.value })}
+                                multiline
+                                rows={3}
+                                fullWidth
+                            />
                             <TimezoneSelect value={timeZone} onChange={onTimeZoneChange} fullWidth />
                             <DateTimePicker
                                 label="Start"
