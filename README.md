@@ -28,7 +28,7 @@ Additional dependencies are added to support individual features
 
 ## Features
 ### Application Shell
-The responsive shell that provides a toolbar, navbar, and aside. 
+The responsive shell that provides a toolbar, navbar, and aside.
 
 ### Authentication
 The DAS template uses Supabase for user authentication and authorization.  Implementation for Google and Microsoft authentication is provided.
@@ -102,12 +102,30 @@ When you're done developing:
 - stop the `npm run dev` process in the terminal
 - run `supabase stop`
 
+## Environments
+Changes are promoted along the branch flow `feature -> dev -> qa -> main`.  Each tier has its own Supabase project so that schema changes are exercised before they reach production data.
+
+| | Branch | Site | Database |
+| --- | --- | --- | --- |
+| Local | feature branches | `npm run dev` on port 3000 | local Supabase (Docker) |
+| QA | `dev`, `qa` | Vercel preview deployments. The `qa` branch has a stable URL | QA Supabase project |
+| Production | `main` | Vercel production deployment | production Supabase project |
+
+Pull request previews on Vercel point at the QA database, so a PR that adds a migration will not see its own schema change until it is merged to `dev`.  Test schema changes locally with `supabase start` first.
+
 ## Deployment
-The application is deployed at Google's Firebase as a static website.  GitHub's workflow action adds site secrets to the build before deploying.
+The application is deployed on Vercel.  Pushes to `main` publish the production deployment. Every other branch gets a preview deployment.  Supabase environment variables are configured in the Vercel project: the Production scope points at the production Supabase project and the Preview scope points at QA.
+
+Database migrations are deployed by `.github/workflows/supabase-migrations.yml`:
+- **pull request** - applies every migration to a throwaway database in the runner and lints the schema.  Nothing hosted is touched.
+- **push to `dev` or `qa`** - `supabase db push` against the QA project.
+- **push to `main`** - `supabase db push` against the production project.
+
+Migrations are forward-only. To undo one, add a new migration.  The workflow reads its credentials from the `qa` and `production` GitHub environments.
 
 ## FAQ
 ### How do I connect to Supabase?
-Environment variables for the connecting to Supabase must be added to the hosting platform as well as the `.env.local` file.  Squad members must obtain the supabase url and auth_anon_key for accessing the Supabase project.
+Environment variables for the connecting to Supabase must be added to the hosting platform as well as the `.env.local` file.  Squad members must obtain the supabase url and auth_anon_key for accessing the Supabase project.  Use the local values printed by `supabase start` for day-to-day development, and the QA project's url and anon key when you need to work against shared data.  Do not point a local build at production.
 
 ### How do I change the menu items?
 Contents of the navbar, the drawer of links on the left of the application window, can be modified by changing the contents of `/src/menu-items/index.tsx`.

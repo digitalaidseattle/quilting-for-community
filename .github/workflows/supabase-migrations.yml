@@ -1,0 +1,98 @@
+name: Supabase Migrations
+
+# Migrations are promoted along the branch flow: feature -> dev -> qa -> main.
+#   pull request   validate only, against a throwaway database in the runner
+#   dev, qa        deploy to the QA Supabase project
+#   main           deploy to the production Supabase project
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - ".github/workflows/supabase-migrations.yml"
+  push:
+    branches: [dev, qa, main]
+    paths:
+      - "supabase/migrations/**"
+      - ".github/workflows/supabase-migrations.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: supabase-migrations-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate migrations on a throwaway database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Applies every migration to an empty Postgres, so a migration that only
+      # works against an already-migrated database fails here instead of in QA.
+      - name: Apply every migration from scratch
+        run: supabase db start
+
+      - name: Lint database schema
+        run: supabase db lint --local --fail-on error
+
+  deploy-qa:
+    name: Deploy to QA
+    needs: validate
+    if: github.event_name != 'pull_request' && contains('qa', github.ref_name)
+    runs-on: ubuntu-latest
+    environment: qa
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.QA_DB_PASSWORD }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        run: supabase link --project-ref "${{ secrets.QA_PROJECT_ID }}"
+
+      - name: Show pending migrations
+        run: supabase db push --dry-run
+
+      - name: Deploy database migrations
+        run: supabase db push
+
+  deploy-production:
+    name: Deploy to production
+    needs: validate
+    if: github.event_name != 'pull_request' && github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        run: supabase link --project-ref "${{ secrets.PRODUCTION_PROJECT_ID }}"
+
+      - name: Show pending migrations
+        run: supabase db push --dry-run
+
+      - name: Deploy database migrations
+        run: supabase db push
