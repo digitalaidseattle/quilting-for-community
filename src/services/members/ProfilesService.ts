@@ -6,6 +6,7 @@
  */
 import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaidseattle/core";
 import { Profile, ProfilesDao } from "./ProfilesDao";
+import { v4 as uuid } from "uuid";
 
 export class ProfilesService {
 
@@ -19,6 +20,19 @@ export class ProfilesService {
     }
 
     constructor(private dao: ProfilesDao = ProfilesDao.getInstance()) { }
+
+    empty(): Profile {
+        return {
+            id: null,
+            name: "",
+            email: "",
+            first_name: "",
+            last_name: "",
+            phone: "",
+            roles: [],
+            waiver_accepted: false
+        }
+    }
 
     async getAll(): Promise<Profile[]> {
         return this.dao.getAll();
@@ -37,7 +51,7 @@ export class ProfilesService {
     }
 
     async insert(entity: Profile): Promise<Profile> {
-        return this.dao.insert(entity);
+        return this.dao.insert({ ...entity, id: uuid() });
     }
 
     async update(id: Identifier, changes: Partial<Profile>): Promise<Profile> {
@@ -50,6 +64,10 @@ export class ProfilesService {
 
     async upsert(entity: Profile): Promise<Profile> {
         return this.dao.upsert(entity);
+    }
+
+    async findBy(field: string, value: any): Promise<Profile[]> {
+        return this.dao.findBy(field, value);
     }
 
 }

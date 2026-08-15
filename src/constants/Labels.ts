@@ -7,5 +7,7 @@ export const Labels = {
     TRANSACTIONS: "Transactions",
 
     NAME: 'Name',
-    EMAIL: 'Email'
+    EMAIL: 'Email',
+
+    ADD_PROFILE: 'Add profile'
 };

@@ -5,7 +5,7 @@
  *
  */
 
-import { Entity } from "@digitalaidseattle/core";
+import { DataAccessOptions, Entity } from "@digitalaidseattle/core";
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 
 export type Profile = Entity & {
@@ -28,6 +28,25 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
             ProfilesDao.instance = new ProfilesDao(SupabaseConfiguration.getInstance().getSupabaseClient(), 'profiles', { select: DEFAULT_SELECT });
         }
         return ProfilesDao.instance;
+    }
+
+    async findBy(field: string, value: any, opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
+        try {
+            const select = this.getSelect(opts!);
+            const mapper = this.getMapper(opts!);
+
+            const { data, error } = await this.client.from(this.tableName)
+                .select(select)
+                .eq(field, value)
+            if (error) {
+                console.error('Unexpected error during select', error);
+                throw new Error('Unexpected error during select');
+            }
+            return data.map(elem => mapper(elem));
+        } catch (err) {
+            console.error('Unexpected error during select:', err);
+            throw err;
+        }
     }
 
 }
