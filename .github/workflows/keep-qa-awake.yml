@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: qa
     steps:
-      - name: Request the QA REST endpoint
+      - name: Request the QA REST health endpoint
         run: |
-          curl -sSf "$URL/rest/v1/" -H "apikey: $KEY" -o /dev/null
+          curl -sSf "$URL/auth/v1/health" -H "apikey: $KEY"
         env:
           URL: ${{ vars.QA_SUPABASE_URL }}
           KEY: ${{ vars.QA_SUPABASE_ANON_KEY }}
