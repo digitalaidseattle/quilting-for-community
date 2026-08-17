@@ -14,6 +14,7 @@ jobs:
   ping:
     name: Ping the QA project
     runs-on: ubuntu-latest
+    environment: qa
     steps:
       - name: Request the QA REST endpoint
         run: |
