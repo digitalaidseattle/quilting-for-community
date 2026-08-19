@@ -7,29 +7,39 @@
 import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaidseattle/core";
 import { Profile, ProfilesDao } from "./ProfilesDao";
 
-export class ProfilesService {
 
-    private static instance: ProfilesService;
+const DUMMY_PROFILES: Profile[] = [
+    { id: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted: true },
+    { id: '2', name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted: true },
+    { id: '3', name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted: false },
+] as Profile[];
+
+export class MockProfilesService {
+
+    private static instance: MockProfilesService;
 
     static getInstance() {
-        if (!ProfilesService.instance) {
-            ProfilesService.instance = new ProfilesService();
+        if (!MockProfilesService.instance) {
+            MockProfilesService.instance = new MockProfilesService();
         }
-        return ProfilesService.instance;
+        return MockProfilesService.instance;
     }
 
     constructor(private dao: ProfilesDao = ProfilesDao.getInstance()) { }
 
     async getAll(): Promise<Profile[]> {
-        return this.dao.getAll();
+        return DUMMY_PROFILES;
     }
 
     async getById(id: Identifier): Promise<Profile> {
         return this.dao.getById(id);
     }
 
-    async find(queryModel: QueryModel, opts?: DataAccessOptions<Profile>): Promise<PageInfo<Profile>> {
-        return this.dao.find(queryModel, opts);
+    async find(_queryModel: QueryModel, _opts?: DataAccessOptions<Profile>): Promise<PageInfo<Profile>> {
+        return {
+            rows: DUMMY_PROFILES,
+            totalRowCount: DUMMY_PROFILES.length
+        }
     }
 
     async batchInsert(entities: Profile[]): Promise<Profile[]> {

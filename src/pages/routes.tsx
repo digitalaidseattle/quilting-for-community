@@ -32,7 +32,7 @@ const routes = [
         ),
       },
       {
-        path: "/profile/:id",
+        path: "/members/:id",
         element: (
           <ProfilePage />
         ),
