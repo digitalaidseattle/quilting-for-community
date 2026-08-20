@@ -64,4 +64,24 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
             throw err;
         }
     }
+
+    // TODO promote to SupabaseDao
+    async findBy(field: string, value: any, opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
+        try {
+            const select = this.getSelect(opts!);
+            const mapper = this.getMapper(opts!);
+
+            const { data, error } = await this.client.from(this.tableName)
+                .select(select)
+                .eq(field, value)
+            if (error) {
+                console.error('Unexpected error during select', error);
+                throw new Error('Unexpected error during select');
+            }
+            return data.map(elem => mapper(elem));
+        } catch (err) {
+            console.error('Unexpected error during select:', err);
+            throw err;
+        }
+    }
 }
