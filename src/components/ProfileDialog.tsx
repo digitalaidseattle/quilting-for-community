@@ -90,6 +90,18 @@ export default function ProfileDialog({
                         sx={{ minHeight: '75px' }}  //TODO  minHeight avoids layout resizing,  may have to make this more repsonsive
                     />
                     <TextField
+                        label="First Name"
+                        error={!!errors.first_name}
+                        helperText={errors.first_name?.message}
+                        sx={{ minHeight: '75px' }}
+                    />
+                    <TextField
+                        label="Last Name"
+                        error={!!errors.last_name}
+                        helperText={errors.last_name?.message}
+                        sx={{ minHeight: '75px' }}
+                    />
+                    <TextField
                         label="Email"
                         type="email"
                         {...register('email', {
@@ -104,6 +116,12 @@ export default function ProfileDialog({
                         })}
                         error={!!errors.email}
                         helperText={errors.email?.message}
+                        sx={{ minHeight: '75px' }}
+                    />
+                    <TextField
+                        label="Phone"
+                        error={!!errors.phone}
+                        helperText={errors.phone?.message}
                         sx={{ minHeight: '75px' }}
                     />
                 </Stack>

@@ -100,7 +100,7 @@ export const MembersPage = () => {
         .then(result => {
           setProfile(undefined);
           setOpenProfileDialog(false);
-          fetchData();
+          fetchData();  // alternatively navigate to profile page
           notifications.success(`Member ${result.name} has been added.`)
         })
         .catch(err => {
