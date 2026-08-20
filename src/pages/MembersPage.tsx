@@ -37,7 +37,7 @@ export const MembersPage = () => {
   const navigate = useNavigate();
 
   const { setLoading } = useContext(LoadingContext);
-  const { refresh, setRefresh } = useContext(RefreshContext);
+  const { refresh } = useContext(RefreshContext);
 
   const apiRef = useGridApiRef();
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
