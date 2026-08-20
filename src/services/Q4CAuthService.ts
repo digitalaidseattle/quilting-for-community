@@ -5,8 +5,24 @@
  *
  */
 
+import { User } from '@digitalaidseattle/core';
 import { SupabaseAuthService, SupabaseConfiguration } from '@digitalaidseattle/supabase';
 import { AuthTokenResponsePassword, SupabaseClient } from '@supabase/supabase-js';
+
+type UserMetadata = User["user_metadata"] & Record<string, unknown>;
+
+function getMetadataRoles(roles: unknown): string[] {
+    if (!Array.isArray(roles)) {
+        return [];
+    }
+
+    return [...new Set(
+        roles
+            .filter((role): role is string => typeof role === 'string')
+            .map((role) => role.trim().toLowerCase())
+            .filter((role) => role.length > 0)
+    )].sort();
+}
 
 /**
  * Q4CAuthService is a subclass of SupabaseAuthService that provides a method to sign in with email and password.
@@ -28,6 +44,33 @@ export class Q4CAuthService extends SupabaseAuthService {
     private constructor(supabaseClient: SupabaseClient) {
         super(supabaseClient);
     }
+
+    /**
+     * Return a DAS core user with roles sourced from the active Supabase session.
+     * Supabase user_metadata is client-editable, so it must not drive
+     * authorization decisions. Using the active session keeps route checks
+     * aligned with the JWT claims used by Supabase RLS.
+     */
+    getUser = async (): Promise<User | null> => {
+        const response = await this.client.auth.getSession();
+        const supabaseUser = response.data.session?.user;
+
+        if (!supabaseUser) {
+            return null;
+        }
+
+        const userMetadata = supabaseUser.user_metadata as Record<string, unknown>;
+        const roles = getMetadataRoles(supabaseUser.app_metadata?.roles);
+
+        return {
+            email: supabaseUser.email ?? String(userMetadata.email ?? ''),
+            user_metadata: {
+                ...userMetadata,
+                email: supabaseUser.email ?? String(userMetadata.email ?? ''),
+                roles,
+            } as UserMetadata,
+        };
+    };
 
     /**
      * Sign in with email and password.

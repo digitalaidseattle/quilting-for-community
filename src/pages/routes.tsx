@@ -28,7 +28,9 @@ const routes = [
       {
         path: "/members",
         element: (
-          <MembersPage />
+          <AuthGate authorizedRoles={["admin"]}>
+            <MembersPage />
+          </AuthGate>
         ),
       },
       {

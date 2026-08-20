@@ -9,8 +9,9 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
     static empty(eventId = ''): EventSession {
         return {
             event_id: eventId,
-            start_at: new Date().toISOString().slice(0, 16),
-            end_at: new Date(Date.now() + DEFAULT_SESSION_DURATION_MS).toISOString().slice(0, 16),
+            description: '',
+            start_at: new Date().toISOString(),
+            end_at: new Date(Date.now() + DEFAULT_SESSION_DURATION_MS).toISOString(),
             max_seats: null,
             status: 'draft',
         } as EventSession;

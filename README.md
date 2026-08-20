@@ -28,7 +28,7 @@ Additional dependencies are added to support individual features
 
 ## Features
 ### Application Shell
-The responsive shell that provides a toolbar, navbar, and aside. 
+The responsive shell that provides a toolbar, navbar, and aside.
 
 ### Authentication
 The DAS template uses Supabase for user authentication and authorization.  Implementation for Google and Microsoft authentication is provided.
@@ -102,12 +102,38 @@ When you're done developing:
 - stop the `npm run dev` process in the terminal
 - run `supabase stop`
 
+## Environments
+Changes are promoted along the branch flow `feature -> dev -> qa -> main`.  Each tier has its own Supabase project so that schema changes are exercised before they reach production data.
+
+| | Branch | Site | Database |
+| --- | --- | --- | --- |
+| Local | feature branches | `npm run dev` on port 3000 | local Supabase (Docker) |
+| QA | `dev`, `qa` | Vercel preview deployments. The `qa` branch has a stable URL | QA Supabase project |
+| Production | `main` | Vercel production deployment | production Supabase project |
+
+Pull request previews on Vercel point at the QA database, so a PR that adds a migration will not see its own schema change until it is merged to `dev`.  Test schema changes locally with `supabase start` first.
+
+### Local test logins
+`supabase db reset` reloads `supabase/test_data/users.sql`, which creates two throwaway accounts on the local stack so you can sign in with email/password instead of going through Google:
+
+| Email | Password | Roles |
+| --- | --- | --- |
+| `admin@example.com` | `password123` | `admin` |
+| `member@example.com` | `password123` | `participant` |
+
 ## Deployment
-The application is deployed at Google's Firebase as a static website.  GitHub's workflow action adds site secrets to the build before deploying.
+The application is deployed on Vercel.  Pushes to `main` publish the production deployment. Every other branch gets a preview deployment.  Supabase environment variables are configured in the Vercel project: the Production scope points at the production Supabase project and the Preview scope points at QA.
+
+Database migrations are deployed by `.github/workflows/supabase-migrations.yml`:
+- **pull request** - applies every migration to a throwaway database in the runner and lints the schema.  Nothing hosted is touched.
+- **push to `dev` or `qa`** - `supabase db push` against the QA project.
+- **push to `main`** - `supabase db push` against the production project.
+
+Migrations are forward-only. To undo one, add a new migration.  The workflow reads its credentials from the `qa` and `production` GitHub environments.
 
 ## FAQ
 ### How do I connect to Supabase?
-Environment variables for the connecting to Supabase must be added to the hosting platform as well as the `.env.local` file.  Squad members must obtain the supabase url and auth_anon_key for accessing the Supabase project.
+Environment variables for the connecting to Supabase must be added to the hosting platform as well as the `.env.local` file.  Squad members must obtain the supabase url and auth_anon_key for accessing the Supabase project.  Use the local values printed by `supabase start` for day-to-day development, and the QA project's url and anon key when you need to work against shared data.  Do not point a local build at production.
 
 ### How do I change the menu items?
 Contents of the navbar, the drawer of links on the left of the application window, can be modified by changing the contents of `/src/menu-items/index.tsx`.
@@ -120,3 +146,17 @@ Since the template uses `react-router-dom` for application routing, there is no 
 
 ### Where does the partner logo get changed?
 The logo, displayed in the upper left hand of the application window and elsewhere, can be modified in `/src/components/Logo/Logo.tsx`.  The image files should be placed in the `/src/assets/images/` directory.
+
+### Integration tests with Supabase CLI
+```bash
+npx supabase start
+npx supabase db reset  # run migrations
+npm run test:integration  # or just test
+```
+
+Required environment variables:
+* `SUPABASE_SECRET_KEY`
+
+Run `npx supabase status` to view authentication keys. `.env.test.local` file can be used.
+
+In order to preserve the local database in case of local manual testing, integration tests should clean up any test data. If this isn't a concern, feel free to run `npx supabase db reset` to reset the database before running the tests.

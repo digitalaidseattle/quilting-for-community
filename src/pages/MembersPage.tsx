@@ -23,9 +23,6 @@ import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
 import { ProfilesService } from "../services/members/ProfilesService";
 
-// ==============================|| DUMMY DATA ||==============================
-
-
 
 // ==============================|| SAMPLE PAGE ||============================== //
 

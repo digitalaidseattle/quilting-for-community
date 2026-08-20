@@ -1,0 +1,24 @@
+name: Keep QA awake
+
+# Supabase Free projects pause after a week with no API requests, and resuming
+# them is a manual click in the dashboard. A twice-weekly request keeps QA up.
+# QA_SUPABASE_URL / QA_SUPABASE_ANON_KEY are repository *variables*, not secrets
+# -- the anon key is public and already ships in the client bundle.
+
+on:
+  schedule:
+    - cron: "0 12 * * 1,4"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    name: Ping the QA project
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      - name: Request the QA REST health endpoint
+        run: |
+          curl -sSf "$URL/auth/v1/health" -H "apikey: $KEY"
+        env:
+          URL: ${{ vars.QA_SUPABASE_URL }}
+          KEY: ${{ vars.QA_SUPABASE_ANON_KEY }}
