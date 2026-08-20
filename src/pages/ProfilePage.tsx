@@ -19,25 +19,19 @@ import {
 
 import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
-
-// Dummy dataset matching the IDs from MembersPage
-const DUMMY_PROFILES: Record<string, Profile & { joinedDate?: string }> = {
-  '1': { id: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted:true, joinedDate: 'Jan 2025' },
-  '2': { id: '2', name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted:true, joinedDate: 'Mar 2025' },
-  '3': { id: '3', name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted:false, joinedDate: 'Nov 2024' },
-};
+import { MockProfilesService } from "../services/members/MockProfilesService";
 
 export const ProfilePage = () => {
+  const service = MockProfilesService.getInstance();
   const { id } = useParams<{ id: string }>();
-  const [profile, setProfile] = useState<typeof DUMMY_PROFILES[string] | null>(null);
+  const [profile, setProfile] = useState<Profile>();
 
   useEffect(() => {
-    if (id && DUMMY_PROFILES[id]) {
-      setProfile(DUMMY_PROFILES[id]);
-    } else {
-      setProfile(null);
+    if (id) {
+      service.getById(id)
+        .then(found => setProfile(found));
     }
-  }, [id]);
+  }, [service, id]);
 
   return (
     <>
@@ -75,9 +69,9 @@ export const ProfilePage = () => {
                 <Typography variant="body1">
                   <strong>Waiver Accepted:</strong> {profile.waiver_accepted ? "Yes" : "No"}
                 </Typography>
-                <Typography variant="body1">
+                {/* <Typography variant="body1">
                   <strong>Joined:</strong> {profile.joinedDate}
-                </Typography>
+                </Typography> */}
               </Stack>
             ) : (
               <Typography variant="h6" color="error">

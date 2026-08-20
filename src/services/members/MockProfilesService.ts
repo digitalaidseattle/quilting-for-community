@@ -9,9 +9,9 @@ import { Profile, ProfilesDao } from "./ProfilesDao";
 
 
 const DUMMY_PROFILES: Profile[] = [
-    { id: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted: true },
-    { id: '2', name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted: true },
-    { id: '3', name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted: false },
+    { id: '1', uid: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted: true },
+    { id: '2', uid: null, name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted: true },
+    { id: '3', uid: null, name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted: false },
 ] as Profile[];
 
 export class MockProfilesService {
@@ -31,8 +31,9 @@ export class MockProfilesService {
         return DUMMY_PROFILES;
     }
 
-    async getById(id: Identifier): Promise<Profile> {
-        return this.dao.getById(id);
+    async getById(_id: Identifier): Promise<Profile> {
+        return DUMMY_PROFILES[0];
+        // return this.dao.getById(id);
     }
 
     async find(_queryModel: QueryModel, _opts?: DataAccessOptions<Profile>): Promise<PageInfo<Profile>> {
