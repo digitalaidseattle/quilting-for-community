@@ -21,14 +21,13 @@ import {
 } from '@mui/x-data-grid';
 
 
-import { LoadingContext, PageInfo, QueryModel, RefreshContext, useNotifications } from "@digitalaidseattle/core";
 import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useNotifications } from "@digitalaidseattle/core";
+import ProfileDialog from "../components/ProfileDialog";
+import { QuickSearch } from "../components/QuickSearch";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/Data";
 import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
 import { ProfilesService } from "../services/members/ProfilesService";
-import { QuickSearch } from "../components/QuickSearch";
-import ProfileDialog from "../components/ProfileDialog";
 
 
 // ==============================|| SAMPLE PAGE ||============================== //
@@ -108,11 +107,6 @@ export const MembersPage = () => {
           notifications.error(`Problems adding ${newProfile.name}.`)
         })
     }
-  }
-
-
-  function handleRowClick(params: GridRowParams<Profile>): void {
-    navigate(`/members/${params.row.id}`)
   }
 
   function CustomToolbar() {
