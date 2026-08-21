@@ -23,6 +23,7 @@ export class EventsDao extends SupabaseDAO<Event> {
             template: false,
             status: 'draft',
             search_key: '',
+            event_sessions: [] as Event['event_sessions'],
         } as Event;
     }
 

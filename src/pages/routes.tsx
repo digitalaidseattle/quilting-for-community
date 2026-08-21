@@ -13,7 +13,6 @@ import { TransactionsPage } from "./TransactionsPage";
 import { ProductsPage } from "./ProductsPage";
 import { AdminEventManagementPage } from "./admin/AdminEventManagementPage";
 import { EventsPage } from "./EventsPage";
-import { ClassesPage } from "./ClassesPage";
 import { ProfilePage } from "./ProfilePage";
 
 const routes = [
@@ -38,10 +37,6 @@ const routes = [
         element: (
           <ProfilePage />
         ),
-      },
-      {
-        path: "/classes",
-        element: <ClassesPage />,
       },
       {
         path: "/events",

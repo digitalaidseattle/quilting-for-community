@@ -40,13 +40,6 @@ export const TemplateConfig = () => {
                 icon: <TeamOutlined />
             } as MenuItem,
             {
-                id: 'classes',
-                title: 'Classes',
-                type: 'item',
-                url: '/classes',
-                icon: <ScheduleOutlined />
-            } as MenuItem,
-            {
                 id: 'events',
                 title: 'Events',
                 type: 'item',
