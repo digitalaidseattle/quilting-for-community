@@ -14,6 +14,7 @@ import { ProductsPage } from "./ProductsPage";
 import { AdminEventManagementPage } from "./admin/AdminEventManagementPage";
 import { EventsPage } from "./EventsPage";
 import { ClassesPage } from "./ClassesPage";
+import { ProfilePage } from "./ProfilePage";
 
 const routes = [
   {
@@ -30,6 +31,12 @@ const routes = [
           <AuthGate authorizedRoles={["admin"]}>
             <MembersPage />
           </AuthGate>
+        ),
+      },
+      {
+        path: "/members/:id",
+        element: (
+          <ProfilePage />
         ),
       },
       {

@@ -46,7 +46,7 @@ jobs:
   deploy-qa:
     name: Deploy to QA
     needs: validate
-    if: github.event_name != 'pull_request' && contains('qa', github.ref_name)
+    if: github.event_name != 'pull_request' && (github.ref_name == 'dev' || github.ref_name == 'qa')
     runs-on: ubuntu-latest
     environment: qa
     env:
