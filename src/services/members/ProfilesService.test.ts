@@ -107,6 +107,7 @@ describe("ProfilesService unit tests", () => {
                 waiver_accepted: false
             }
         )
+    });
       
     test("getInstructorCandidates queries overlapping volunteer/instructor/admin roles and sorts by label", async () => {
         const admin = {
