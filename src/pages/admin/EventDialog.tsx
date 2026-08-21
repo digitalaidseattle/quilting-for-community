@@ -36,6 +36,7 @@ import { Profile } from "../../services/members/ProfilesDao";
 import { ProfilesService } from "../../services/members/ProfilesService";
 import {
     formatSessionDate,
+    defaultNewSessionStart,
     nowAsWallDate,
     utcIsoToWallDate,
     wallDateToUtcIso,
@@ -242,7 +243,7 @@ export const EventDialog = ({
     }
 
     function openNewSession() {
-        const startWall = nowAsWallDate(timeZone);
+        const startWall = defaultNewSessionStart(timeZone);
         const duration = defaultDurationMinutes(event.duration);
         const endWall = new Date(startWall.getTime() + duration * 60000);
         const draft = service.sessionFromEvent(event, {

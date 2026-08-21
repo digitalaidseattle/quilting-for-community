@@ -120,3 +120,23 @@ export function wallDateToUtcIso(date: Date, timeZone: string): string {
 export function nowAsWallDate(timeZone: string): Date {
     return utcIsoToWallDate(new Date().toISOString(), timeZone);
 }
+
+/**
+ * Default start for a newly created session: tomorrow, at the current time
+ * rounded to the nearest hour (11:40 → 12:00, without rolling past tomorrow).
+ */
+export function defaultNewSessionStart(timeZone: string): Date {
+    const now = nowAsWallDate(timeZone);
+    const roundedHour = now.getMinutes() >= 30
+        ? (now.getHours() + 1) % 24
+        : now.getHours();
+    return new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+        roundedHour,
+        0,
+        0,
+        0,
+    );
+}
