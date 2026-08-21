@@ -6,7 +6,7 @@ describe("ProfilesService unit tests", () => {
     let mockDao = {
         update: vi.fn(),
         upsert: vi.fn(),
-        findBy: vi.fn()
+        findBy: vi.fn(),
         getByOverlappingRoles: vi.fn(),
     } as unknown as ProfilesDao;
 
