@@ -1,3 +1,4 @@
+import { FieldErrors, Resolver } from "react-hook-form";
 import { Event } from "./types";
 
 export type EventFieldErrors = Partial<Record<
@@ -45,3 +46,34 @@ export function validateEvent(event: Event): EventFieldErrors {
 export function hasEventErrors(errors: EventFieldErrors): boolean {
     return Object.keys(errors).length > 0;
 }
+
+export const eventFormResolver: Resolver<Event> = async (values) => {
+    const fieldErrors = validateEvent(values);
+    if (!hasEventErrors(fieldErrors)) {
+        return { values, errors: {} };
+    }
+
+    const errors: FieldErrors<Event> = {};
+    if (fieldErrors.name) {
+        errors.name = { type: 'validate', message: fieldErrors.name };
+    }
+    if (fieldErrors.duration) {
+        errors.duration = { type: 'validate', message: fieldErrors.duration };
+    }
+    if (fieldErrors.max_seats) {
+        errors.max_seats = { type: 'validate', message: fieldErrors.max_seats };
+    }
+    if (fieldErrors.volunteer_seat_count) {
+        errors.volunteer_seat_count = { type: 'validate', message: fieldErrors.volunteer_seat_count };
+    }
+    if (fieldErrors.price) {
+        errors.price = { type: 'validate', message: fieldErrors.price };
+    }
+    if (fieldErrors.sessions) {
+        errors.root = {
+            sessions: { type: 'validate', message: fieldErrors.sessions },
+        };
+    }
+
+    return { values: {}, errors };
+};

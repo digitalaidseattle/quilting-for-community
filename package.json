@@ -21,7 +21,8 @@
     "@vitejs/plugin-react-swc": "^4.3.0",
     "dayjs": "^1.11.21",
     "react-big-calendar": "^1.20.0",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.85.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
