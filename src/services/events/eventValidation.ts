@@ -70,8 +70,9 @@ export const eventFormResolver: Resolver<Event> = async (values) => {
         errors.price = { type: 'validate', message: fieldErrors.price };
     }
     if (fieldErrors.sessions) {
-        errors.root = {
-            sessions: { type: 'validate', message: fieldErrors.sessions },
+        errors.event_sessions = {
+            type: 'validate',
+            message: fieldErrors.sessions,
         };
     }
 
