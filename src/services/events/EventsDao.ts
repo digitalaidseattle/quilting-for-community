@@ -1,6 +1,9 @@
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 import { Event } from "./types";
 
+const EVENT_SELECT =
+    '*, instructor:profiles!instructor_id(id, name, email, first_name, last_name), event_sessions(*)';
+
 export class EventsDao extends SupabaseDAO<Event> {
     private static instance: EventsDao;
 
@@ -9,7 +12,8 @@ export class EventsDao extends SupabaseDAO<Event> {
             name: '',
             description: '',
             notes: '',
-            category: 'general',
+            category: '',
+            instructor_id: null,
             duration: 60,
             max_seats: 10,
             volunteer_seat_count: 2,
@@ -27,7 +31,7 @@ export class EventsDao extends SupabaseDAO<Event> {
             EventsDao.instance = new EventsDao(
                 SupabaseConfiguration.getInstance().getSupabaseClient(),
                 'events',
-                { select: '*, event_sessions(*)' }
+                { select: EVENT_SELECT }
             );
         }
         return EventsDao.instance;
