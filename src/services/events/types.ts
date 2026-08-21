@@ -1,15 +1,10 @@
 import { Entity } from "@digitalaidseattle/core";
+import { Profile } from "../members/ProfilesDao";
 
 export type SessionStatus = 'draft' | 'published' | 'cancelled';
 
 export type EventStatus = SessionStatus;
-export type EventInstructor = {
-    id: string;
-    name: string;
-    email: string;
-    first_name?: string;
-    last_name?: string;
-};
+export type EventInstructor = Pick<Profile, 'id' | 'name' | 'email' | 'first_name' | 'last_name'>;
 
 export type Event = Entity & {
     name: string;

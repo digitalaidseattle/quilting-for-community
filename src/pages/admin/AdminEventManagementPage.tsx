@@ -25,6 +25,7 @@ import { EventsService } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventSession } from "../../services/events/types";
+import { ProfilesService } from "../../services/members/ProfilesService";
 import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
 import { EventDialog } from "./EventDialog";
@@ -235,10 +236,9 @@ export const AdminEventManagementPage = () => {
             width: 160,
             sortable: false,
             valueGetter: (_: unknown, row: Event) =>
-                row.instructor?.name?.trim()
-                || [row.instructor?.first_name, row.instructor?.last_name].filter(Boolean).join(' ').trim()
-                || row.instructor?.email
-                || '',
+                row.instructor
+                    ? ProfilesService.getInstance().profileLabel(row.instructor)
+                    : '',
         },
         { field: 'max_seats', headerName: 'Seats', width: 80 },
         {

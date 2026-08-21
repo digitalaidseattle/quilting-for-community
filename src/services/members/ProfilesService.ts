@@ -7,13 +7,7 @@
 import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaidseattle/core";
 import { Profile, ProfilesDao, UpsertProfile } from "./ProfilesDao";
 
-function profileLabel(profile: Pick<Profile, 'id' | 'name' | 'email' | 'first_name' | 'last_name'>): string {
-    const name = profile.name?.trim()
-        || [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
-    return name || profile.email || String(profile.id);
-}
-
-export { profileLabel };
+export type ProfileLabelSource = Pick<Profile, 'id' | 'name' | 'email' | 'first_name' | 'last_name'>;
 
 export class ProfilesService {
 
@@ -26,7 +20,18 @@ export class ProfilesService {
         return ProfilesService.instance;
     }
 
+    static setInstance(service: ProfilesService) {
+        ProfilesService.instance = service;
+    }
+
     constructor(private dao: ProfilesDao = ProfilesDao.getInstance()) { }
+
+    /** Display label for a profile. Override on a subclass (then `setInstance`) to change it app-wide. */
+    profileLabel(profile: ProfileLabelSource): string {
+        const name = profile.name?.trim()
+            || [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
+        return name || profile.email || String(profile.id);
+    }
 
     async find(queryModel: QueryModel, opts?: DataAccessOptions<Profile>): Promise<PageInfo<Profile>> {
         return this.dao.find(queryModel, opts);
@@ -36,13 +41,15 @@ export class ProfilesService {
         return this.dao.getAll(opts);
     }
 
-    /** Profiles eligible to lead an event (volunteer or admin). */
+    /** Roles that can be assigned as an event instructor. Override to include admin, etc. */
+    instructorCandidateRoles(): string[] {
+        return ['volunteer', 'instructor', 'admin'];
+    }
+
+    /** Profiles eligible to lead an event. */
     async getInstructorCandidates(): Promise<Profile[]> {
-        const profiles = await this.dao.getAll();
-        return profiles
-            .filter((profile) =>
-                profile.roles?.includes('volunteer') || profile.roles?.includes('admin'))
-            .sort((a, b) => profileLabel(a).localeCompare(profileLabel(b)));
+        const profiles = await this.dao.getByOverlappingRoles(this.instructorCandidateRoles());
+        return [...profiles].sort((a, b) => this.profileLabel(a).localeCompare(this.profileLabel(b)));
     }
 
     async getById(id: Identifier): Promise<Profile> {
