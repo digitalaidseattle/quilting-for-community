@@ -36,6 +36,7 @@ import { Profile } from "../../services/members/ProfilesDao";
 import { ProfilesService } from "../../services/members/ProfilesService";
 import {
     formatSessionDate,
+    defaultNewSessionStart,
     nowAsWallDate,
     utcIsoToWallDate,
     wallDateToUtcIso,
@@ -145,7 +146,6 @@ export const EventDialog = ({
 
     const {
         control,
-        register,
         reset,
         setValue,
         getValues,
@@ -243,7 +243,7 @@ export const EventDialog = ({
     }
 
     function openNewSession() {
-        const startWall = nowAsWallDate(timeZone);
+        const startWall = defaultNewSessionStart(timeZone);
         const duration = defaultDurationMinutes(event.duration);
         const endWall = new Date(startWall.getTime() + duration * 60000);
         const draft = service.sessionFromEvent(event, {
@@ -302,16 +302,17 @@ export const EventDialog = ({
         if (!values.start_at || values.duration < 1) return null;
 
         const startWall = utcIsoToWallDate(values.start_at, timeZone);
+        const { duration, ...sessionFields } = values;
         return {
-            ...values,
+            ...sessionFields,
             id: values.id ?? crypto.randomUUID(),
             event_id: (event.id as string) ?? values.event_id ?? '',
             start_at: wallDateToUtcIso(startWall, timeZone),
             end_at: wallDateToUtcIso(
-                new Date(startWall.getTime() + values.duration * 60000),
+                new Date(startWall.getTime() + duration * 60000),
                 timeZone,
             ),
-        } as EventSession;
+        };
     }
 
     async function onSaveSession(values: SessionFormValues) {
@@ -334,7 +335,7 @@ export const EventDialog = ({
         setValue('event_sessions', [...others, normalized].sort((a, b) => a.start_at.localeCompare(b.start_at)), {
             shouldValidate: true,
         });
-        clearErrors('root');
+        clearErrors('event_sessions');
         setSessionDialogOpen(false);
     }
 
@@ -425,29 +426,50 @@ export const EventDialog = ({
                                 ))}
                             </TextField>
                         )}
-                        <TextField
-                            label="Title"
-                            required
-                            error={Boolean(errors.name)}
-                            helperText={errors.name?.message}
-                            fullWidth
-                            {...register('name')}
+                        <Controller
+                            name="name"
+                            control={control}
+                            render={({ field, fieldState }) => (
+                                <TextField
+                                    {...field}
+                                    label="Title"
+                                    required
+                                    error={Boolean(fieldState.error)}
+                                    helperText={fieldState.error?.message}
+                                    slotProps={{ inputLabel: { shrink: Boolean(field.value) } }}
+                                    fullWidth
+                                />
+                            )}
                         />
                         <Stack direction="row" spacing={2} alignItems="flex-start">
-                            <TextField
-                                label="Description"
-                                multiline
-                                rows={3}
-                                sx={{ flex: 1 }}
-                                {...register('description')}
+                            <Controller
+                                name="description"
+                                control={control}
+                                render={({ field }) => (
+                                    <TextField
+                                        {...field}
+                                        label="Description"
+                                        multiline
+                                        rows={3}
+                                        slotProps={{ inputLabel: { shrink: Boolean(field.value) } }}
+                                        sx={{ flex: 1 }}
+                                    />
+                                )}
                             />
-                            <TextField
-                                label="Notes"
-                                placeholder="Internal Notes"
-                                multiline
-                                rows={3}
-                                sx={{ flex: 1 }}
-                                {...register('notes')}
+                            <Controller
+                                name="notes"
+                                control={control}
+                                render={({ field }) => (
+                                    <TextField
+                                        {...field}
+                                        label="Notes"
+                                        placeholder="Internal Notes"
+                                        multiline
+                                        rows={3}
+                                        slotProps={{ inputLabel: { shrink: Boolean(field.value) } }}
+                                        sx={{ flex: 1 }}
+                                    />
+                                )}
                             />
                         </Stack>
                         <Stack direction="row" spacing={2}>
@@ -502,7 +524,11 @@ export const EventDialog = ({
                                             </li>
                                         )}
                                         renderInput={(params) => (
-                                            <TextField {...params} label="Instructor" />
+                                            <TextField
+                                                {...params}
+                                                label="Instructor"
+                                                slotProps={{ inputLabel: { shrink: Boolean(selectedInstructor) || Boolean(params.inputProps?.value) } }}
+                                            />
                                         )}
                                         sx={{ flex: 1 }}
                                     />
@@ -609,7 +635,7 @@ export const EventDialog = ({
                                             onChange={(e) => {
                                                 field.onChange(e.target.checked);
                                                 if (e.target.checked) {
-                                                    clearErrors('root');
+                                                    clearErrors('event_sessions');
                                                 }
                                             }}
                                         />
@@ -626,8 +652,8 @@ export const EventDialog = ({
                                     Add session
                                 </Button>
                             </Stack>
-                            {errors.root?.sessions?.message && (
-                                <Alert severity="error">{errors.root.sessions.message}</Alert>
+                            {typeof errors.event_sessions?.message === 'string' && errors.event_sessions.message && (
+                                <Alert severity="error">{errors.event_sessions.message}</Alert>
                             )}
                             <Box
                                 sx={{
