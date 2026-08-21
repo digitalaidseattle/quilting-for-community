@@ -8,6 +8,8 @@ import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaid
 import { Profile, ProfilesDao, UpsertProfile } from "./ProfilesDao";
 import { v4 as uuid } from "uuid";
 
+export type ProfileLabelSource = Pick<Profile, 'id' | 'name' | 'email' | 'first_name' | 'last_name'>;
+
 export class ProfilesService {
 
     private static instance: ProfilesService;
@@ -17,6 +19,10 @@ export class ProfilesService {
             ProfilesService.instance = new ProfilesService();
         }
         return ProfilesService.instance;
+    }
+
+    static setInstance(service: ProfilesService) {
+        ProfilesService.instance = service;
     }
 
     constructor(private dao: ProfilesDao = ProfilesDao.getInstance()) { }
@@ -35,6 +41,12 @@ export class ProfilesService {
         }
     }
 
+    /** Display label for a profile. Override on a subclass (then `setInstance`) to change it app-wide. */
+    profileLabel(profile: ProfileLabelSource): string {
+        const name = profile.name?.trim()
+            || [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
+        return name || profile.email || String(profile.id);
+    }
 
     async find(queryModel: QueryModel, opts?: DataAccessOptions<Profile>): Promise<PageInfo<Profile>> {
         return this.dao.find(queryModel, opts);
@@ -42,6 +54,17 @@ export class ProfilesService {
 
     async getAll(opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
         return this.dao.getAll(opts);
+    }
+
+    /** Roles that can be assigned as an event instructor. Override to include admin, etc. */
+    instructorCandidateRoles(): string[] {
+        return ['volunteer', 'instructor', 'admin'];
+    }
+
+    /** Profiles eligible to lead an event. */
+    async getInstructorCandidates(): Promise<Profile[]> {
+        const profiles = await this.dao.getByOverlappingRoles(this.instructorCandidateRoles());
+        return [...profiles].sort((a, b) => this.profileLabel(a).localeCompare(this.profileLabel(b)));
     }
 
     async getById(id: Identifier): Promise<Profile> {

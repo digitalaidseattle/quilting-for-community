@@ -7,6 +7,7 @@ describe("ProfilesService unit tests", () => {
         update: vi.fn(),
         upsert: vi.fn(),
         findBy: vi.fn()
+        getByOverlappingRoles: vi.fn(),
     } as unknown as ProfilesDao;
 
     beforeAll(() => {
@@ -61,7 +62,6 @@ describe("ProfilesService unit tests", () => {
         }, undefined)
     });
 
-
     test("getByUid() - empty", async () => {
         const findBySpy = vitest.spyOn(mockDao, 'findBy').mockResolvedValue([]);
         service.getByUid('test_uid')
@@ -107,5 +107,32 @@ describe("ProfilesService unit tests", () => {
                 waiver_accepted: false
             }
         )
+      
+    test("getInstructorCandidates queries overlapping volunteer/instructor/admin roles and sorts by label", async () => {
+        const admin = {
+            id: "admin",
+            name: "Admin User",
+            email: "admin@example.org",
+            roles: ["admin"],
+        } as Profile;
+        const volunteer = {
+            id: "vol",
+            name: "Zoe Volunteer",
+            email: "zoe@example.org",
+            roles: ["volunteer"],
+        } as Profile;
+        const instructor = {
+            id: "inst",
+            name: "Alex Instructor",
+            email: "alex@example.org",
+            roles: ["instructor"],
+        } as Profile;
+
+        vi.mocked(mockDao.getByOverlappingRoles).mockResolvedValue([admin, volunteer, instructor]);
+
+        const result = await service.getInstructorCandidates();
+
+        expect(mockDao.getByOverlappingRoles).toHaveBeenCalledWith(["volunteer", "instructor", "admin"]);
+        expect(result.map((profile) => profile.id)).toEqual(["admin", "inst", "vol"]);
     });
 });

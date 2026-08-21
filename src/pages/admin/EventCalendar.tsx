@@ -52,6 +52,31 @@ function statusColor(status: SessionStatus): string {
     }
 }
 
+function formatUsd(price: number): string {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: price % 1 === 0 ? 0 : 2,
+        maximumFractionDigits: 2,
+    }).format(price);
+}
+
+function CalendarEventContent({ event, showTime }: { event: CalendarEvent; showTime: boolean }) {
+    const price = formatUsd(event.resource.event.price);
+    const details = showTime ? `${dayjs(event.start).format('h:mm A')} · ${price}` : price;
+
+    return (
+        <Box sx={{ lineHeight: 1.25, overflow: 'hidden' }}>
+            <Box component="span" sx={{ fontWeight: 600 }}>
+                {event.title}
+            </Box>
+            <Box component="div" sx={{ opacity: 0.92, fontSize: '0.75em' }}>
+                {details}
+            </Box>
+        </Box>
+    );
+}
+
 function toDate(value: string | Date): Date {
     return value instanceof Date ? value : new Date(value);
 }
@@ -155,6 +180,12 @@ export const EventCalendar = ({
                     onEventDrop={applyTimes}
                     onEventResize={applyTimes}
                     onSelectEvent={(calEvent) => onSessionSelect(calEvent.resource.event, calEvent.resource.session)}
+                    components={{
+                        event: ({ event }) => <CalendarEventContent event={event} showTime={false} />,
+                        month: {
+                            event: ({ event }) => <CalendarEventContent event={event} showTime />,
+                        },
+                    }}
                     eventPropGetter={(calEvent) => ({
                         style: {
                             backgroundColor: statusColor(calEvent.resource.session.status),
@@ -163,7 +194,7 @@ export const EventCalendar = ({
                     })}
                     tooltipAccessor={(calEvent) => {
                         const { session, event } = calEvent.resource;
-                        return `${event.name} · ${formatSessionDate(session.start_at, timeZone)} (${session.status})`;
+                        return `${event.name} · ${formatSessionDate(session.start_at, timeZone)} · ${formatUsd(event.price)} (${session.status})`;
                     }}
                 />
             </Box>

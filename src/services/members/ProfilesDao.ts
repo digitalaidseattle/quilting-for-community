@@ -38,6 +38,19 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
         return super.upsert(entity as Profile, opts);
     }
 
+    async getByOverlappingRoles(roles: string[]): Promise<Profile[]> {
+        const { data, error } = await this.client
+            .from(this.tableName)
+            .select(this.select)
+            .overlaps('roles', roles);
+
+        if (error) {
+            throw error;
+        }
+
+        return (data ?? []).map((row) => this.mapJson(row));
+    }
+
     async getByUid(uid: Identifier): Promise<Profile | null> {
         const query: QueryModel = {
             page: 0,
