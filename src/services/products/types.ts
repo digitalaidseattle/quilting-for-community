@@ -11,7 +11,6 @@ export type Product = Entity & {
     images: string[];
     // Status stored in constants table
     status: string;
-    product_history?: ProductHistory[];
 };
 
 export type ProductHistory = Entity & {
@@ -19,4 +18,9 @@ export type ProductHistory = Entity & {
     change_date: string;
     sale_price: number | null;
     regular_price: number;
+};
+
+export type PriceChange = {
+    regular_price: number;
+    sale_price?: number | null;
 };
