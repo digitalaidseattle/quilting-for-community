@@ -253,7 +253,7 @@ export const AdminEventManagementPage = () => {
             width: 230,
             sortable: false,
             renderCell: (params: { row: Event }) => (
-                <Stack direction="row" spacing={1}>
+                <Stack direction="row" spacing={1} onClick={(e) => e.stopPropagation()}>
                     <Button size="small" onClick={() => openEdit(params.row)}>Edit</Button>
                     <Button size="small" onClick={() => handleClone(params.row)}>Clone</Button>
                     <Button size="small" color="error" onClick={() => setEventToDelete(params.row)}>Delete</Button>
@@ -319,6 +319,8 @@ export const AdminEventManagementPage = () => {
                                 columns={columns}
                                 autoHeight
                                 disableRowSelectionOnClick
+                                onRowClick={(params) => openEdit(params.row)}
+                                sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
 
                                 paginationMode='server'
                                 paginationModel={paginationModel}

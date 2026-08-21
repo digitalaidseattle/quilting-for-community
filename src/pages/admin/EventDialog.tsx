@@ -302,16 +302,17 @@ export const EventDialog = ({
         if (!values.start_at || values.duration < 1) return null;
 
         const startWall = utcIsoToWallDate(values.start_at, timeZone);
+        const { duration, ...sessionFields } = values;
         return {
-            ...values,
+            ...sessionFields,
             id: values.id ?? crypto.randomUUID(),
             event_id: (event.id as string) ?? values.event_id ?? '',
             start_at: wallDateToUtcIso(startWall, timeZone),
             end_at: wallDateToUtcIso(
-                new Date(startWall.getTime() + values.duration * 60000),
+                new Date(startWall.getTime() + duration * 60000),
                 timeZone,
             ),
-        } as EventSession;
+        };
     }
 
     async function onSaveSession(values: SessionFormValues) {
