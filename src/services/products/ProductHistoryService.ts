@@ -20,11 +20,11 @@ export class ProductHistoryService
         return this.dao.find(query);
     }
 
-    getByProductId(productId: string): Promise<ProductHistory[]> {
-        return ProductHistoryDao.getInstance().getByProductId(productId);
+    getByProductId(productId: string, opts?: { limit?: number }): Promise<ProductHistory[]> {
+        return ProductHistoryDao.getInstance().getByProductId(productId, opts);
     }
 
-    getMostRecentByProductId(productId: string, limit: number): Promise<ProductHistory[]> {
-        return ProductHistoryDao.getInstance().getMostRecentByProductId(productId, limit);
+    getCurrentPrice(productId: string): Promise<ProductHistory | null> {
+        return ProductHistoryDao.getInstance().getCurrentPrice(productId);
     }
 }
