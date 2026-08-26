@@ -21,7 +21,7 @@ import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext } from
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
-import { EventsService } from "../../services/events/EventsService";
+import { EventsService, withSortedSessions } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventSession } from "../../services/events/types";
@@ -178,7 +178,7 @@ export const AdminEventManagementPage = () => {
     }
 
     async function handleSessionTimesChange(session: EventSession, startAt: string, endAt: string) {
-        setCalendarEvents((prev) => prev.map((event) => ({
+        setCalendarEvents((prev) => prev.map((event) => withSortedSessions({
             ...event,
             event_sessions: (event.event_sessions ?? []).map((s) =>
                 s.id === session.id ? { ...s, start_at: startAt, end_at: endAt } : s

@@ -28,7 +28,7 @@ import { ConfirmationDialog } from "@digitalaidseattle/mui";
 import { LoadingContext } from "@digitalaidseattle/core";
 import { EventCategorySelect } from "../../components/EventCategorySelect";
 import { NumberField } from "../../components/NumberField";
-import { EventsService } from "../../services/events/EventsService";
+import { EventsService, withSortedSessions } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { Event, EventInstructor, EventSession, SessionStatus } from "../../services/events/types";
 import { eventFormResolver } from "../../services/events/eventValidation";
@@ -193,12 +193,12 @@ export const EventDialog = ({
     }, [open, sessionOnly, profilesService]);
 
     useEffect(() => {
-        reset(editing);
+        reset(withSortedSessions(editing));
         setSelectedTemplateId('');
         // In session-only mode the calendar already has current session times;
         // refetching can briefly race a just-finished drag and show stale times.
         if (editing.id && !sessionOnly) {
-            service.getById(editing.id).then((full) => reset(full ?? editing));
+            service.getById(editing.id).then((full) => reset(withSortedSessions(full ?? editing)));
         }
     }, [editing, open, sessionOnly, reset, service]);
 
