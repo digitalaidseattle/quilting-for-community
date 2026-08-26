@@ -1,97 +1,27 @@
-# Digital Aid Seattle Admin Template
+# Quilting for Community — Admin Portal
 
-This template forms the basis for line-of-business web applications.  Frequently, partners need a simple CRUD interface for applications like:
-* inventory management
-* project/task tracking
-* document submittal
+The admin portal and backend for [Quilting for Community](https://www.quiltingforcommunity.org/) (Q4C), a non-profit making quilting and fiber arts accessible. Built by Digital Aid Seattle.
 
-The template supports these application types by providing an application shell with common features such as:
-* authentication
-* dialogs for data entry
-* data tables
-* form validation
-* file uploads
-* drag-and-drop
-* Excel spreadsheet support
+This project replaces the Acuity Scheduling / Squarespace to schedule and manage classes. It owns the admin UI and the Supabase backend. A companion static site (the `Q4C-website` Next.js repo) will replace the current public frontend where participants and volunteers sign up.
 
-A venture squad will be able to copy this template and modify it to suit their venture's need.
+This repo was based on the [DAS Admin Template](https://github.com/digitalaidseattle/das-admin-template).
 
-## Dependencies
-The template is built with:
-* React
-* TypeScript
-* Material UI
-* Vite
-* Supabase
+## Tech stack
 
-Additional dependencies are added to support individual features
+* React + TypeScript + Vite
+* Material UI, with `@digitalaidseattle/core`, `@digitalaidseattle/mui`, and `@digitalaidseattle/supabase` shared packages providing the app shell, auth, and Supabase plumbing
+* Supabase (Postgres, auth, RLS) with versioned migrations
+* Vercel (app hosting) and GitHub Actions (migration deployment)
 
 ## Features
-### Application Shell
-The responsive shell that provides a toolbar, navbar, and aside.
 
-### Authentication
-The DAS template uses Supabase for user authentication and authorization.  Implementation for Google and Microsoft authentication is provided.
-
-### CRUD
-The DAS template uses Supabase for data storage.  It is anticipated that applications requiring RDBMS support would use this.  Examples of lists, dialogs, and forms with validation are available. The file `src/setions/tickets/TicketTable.tsx` and `src/setions/tickets/TicketGrid.tsx` are entry points for the example.
-
-### Markdown
-The DAS template includes support for displaying Markdown. The typical use-case is to display privacy policies and/or terms and conditions.  The content on the page can be stored as a application resource to allow changes withou redployment.  One consequence of supporting Markdown is not using Tailwind CSS.  Tailwind removes default formatting from HTML components (e.g. h1 renders plainly with default font size and weight). Markdown is implemented with react-markdown.
-
-### File Storage
-The DAS template includes an example of uploading, reading, as listing of files in Supabase's storage system.  The use-case for this could include storing documents, like release forms, for an application. The file `src/setions/file-storage/UploadPage.tsx` is the entry point for the example.
-
-### Maps
-The DAS template includes an example mapping page `src/sections/maps/MapPage.tsx`.  Maps were implemented with react-map-gl & maplibre-gl.
-
-### Drag & Drop
-The DAS template includes an example of drag-and-drop use `src/pages/dragdrop/DragDropPage.tsx`. Drag and drop is implemented with @dnd-kit/core and @dnd-kit/sortable.
-
-### Excel Parsing
-The DAS template includes an example of parsing a spreadsheet. it is implemented with `xlsx`.
-
-## Components
-The template includes components that provide common functionality and enforce standards.  The components should be used in venture applications to meet required behaviors.  This consistency will allow maintainers to have fewer points of support.
-
-### Polling
-The application shell includes a 10 second timer. The RefreshContext can be used to refresh components with current data.
-
-```
-    const { refresh } = useContext(RefreshContext)
-
-    useEffect(() => {
-        // Refresh action
-        ticketService.getTickets(NUM_TIX)
-            .then((tix) => setTickets(tix))
-    }, [refresh])
-```
-### Loading / Loading Indicator
-The application shell includes a linear progress indicator.  The indicator is in the shell header and displays when the LoadingContext is set.  Components can use the LoadingContext to control the indicator.
-
-
-```
-    const { setLoading } = useContext(LoadingContext)
-
-     useEffect(() => {
-        setLoading(true)
-        ticketService.getTickets(NUM_TIX)
-            .then((tix) => setTickets(tix))
-            .finally(() => setLoading(false));
-    }, [setLoading])
-```
-
-### theming
-A base theming added based on primary and secondary color of project logo and branding including a background primary color in main and minimal layout and secondary color for profile / login / 404  buttons.
-
-This base theming could be easily changed for different ventures by changing two following primary and secondary color in src/themes/palette file.
-
-const primaryColor = "#00728f"
-const secondaryColor = "#ef3825"
-
-These two colors was used for DAS Admin Template and should be changed for other projects in addition to change logo and Application name in env file
+* CRUD events and sessions for them. Easily clone events too.
+* List and calendar views for events
+* View list of all users and details about them
+* Integration tests against local Supabase in `test/integration/` (`npm run test:integration`)
 
 ## Dev Environment Setup
+
 - create `.env` file and add vars that another dev will provide
 - install [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started?queryGroups=platform&platform=macos) and Docker (required for Supabase to run locally)
 - run `supabase start`
@@ -103,6 +33,7 @@ When you're done developing:
 - run `supabase stop`
 
 ## Environments
+
 Changes are promoted along the branch flow `feature -> dev -> qa -> main`.  Each tier has its own Supabase project so that schema changes are exercised before they reach production data.
 
 | | Branch | Site | Database |
@@ -113,15 +44,8 @@ Changes are promoted along the branch flow `feature -> dev -> qa -> main`.  Each
 
 Pull request previews on Vercel point at the QA database, so a PR that adds a migration will not see its own schema change until it is merged to `dev`.  Test schema changes locally with `supabase start` first.
 
-### Local test logins
-`supabase db reset` reloads `supabase/test_data/users.sql`, which creates two throwaway accounts on the local stack so you can sign in with email/password instead of going through Google:
-
-| Email | Password | Roles |
-| --- | --- | --- |
-| `admin@example.com` | `password123` | `admin` |
-| `member@example.com` | `password123` | `participant` |
-
 ## Deployment
+
 The application is deployed on Vercel.  Pushes to `main` publish the production deployment. Every other branch gets a preview deployment.  Supabase environment variables are configured in the Vercel project: the Production scope points at the production Supabase project and the Preview scope points at QA.
 
 Database migrations are deployed by `.github/workflows/supabase-migrations.yml`:
@@ -131,23 +55,31 @@ Database migrations are deployed by `.github/workflows/supabase-migrations.yml`:
 
 Migrations are forward-only. To undo one, add a new migration.  The workflow reads its credentials from the `qa` and `production` GitHub environments.
 
+### Local test logins
+
+`supabase db reset` reloads `supabase/test_data/users.sql`, which creates two throwaway accounts on the local stack so you can sign in with email/password instead of going through Google:
+
+| Email | Password | Roles |
+| --- | --- | --- |
+| `admin@example.com` | `password123` | `admin` |
+| `member@example.com` | `password123` | `participant` |
+
 ## FAQ
+
 ### How do I connect to Supabase?
-Environment variables for the connecting to Supabase must be added to the hosting platform as well as the `.env.local` file.  Squad members must obtain the supabase url and auth_anon_key for accessing the Supabase project.  Use the local values printed by `supabase start` for day-to-day development, and the QA project's url and anon key when you need to work against shared data.  Do not point a local build at production.
 
-### How do I change the menu items?
-Contents of the navbar, the drawer of links on the left of the application window, can be modified by changing the contents of `/src/menu-items/index.tsx`.
+Environment variables for connecting to Supabase must be added to the hosting platform as well as the `.env.local` file.  Squad members must obtain the supabase url and auth_anon_key for accessing the Supabase project.  Use the local values printed by `supabase start` for day-to-day development, and the QA project's url and anon key when you need to work against shared data.  Do not point a local build at production.
 
-### How do I change the toolbar items?
-Contents of the toolbar, the links at the top the application window and left of the profile button, can be modified by changing the contents of `/src/toolbar-items/index.tsx`. The file `/src/sections/tickets/TicketToolbarItem` contains an example of what can be done with a toolbar item.
+### How do I change the navbar, toolbar, logo, or app name?
+
+The drawer menu items, toolbar items, and logo are all configured in `src/TemplateConfig.tsx`.  Logo image files live in `src/assets/images/`.  The application name comes from the `VITE_APPLICATION_NAME` env var.
 
 ### How do I add a page to the application?
-Since the template uses `react-router-dom` for application routing, there is no requirement to placement new pages in the `pages` folder.  It is by convention that new pages are placed there.  For the page to be included in the application `src/pages/routes.tsx` must be updated to include the new page.
 
-### Where does the partner logo get changed?
-The logo, displayed in the upper left hand of the application window and elsewhere, can be modified in `/src/components/Logo/Logo.tsx`.  The image files should be placed in the `/src/assets/images/` directory.
+New pages go in `src/pages/` by convention, and `src/pages/routes.tsx` must be updated for the page to be routable.  Wrap admin-only routes in `AuthGate` with the appropriate roles.
 
 ### Integration tests with Supabase CLI
+
 ```bash
 npx supabase start
 npx supabase db reset  # run migrations
