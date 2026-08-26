@@ -9,11 +9,11 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
     static empty(eventId = ''): EventSession {
         return {
             event_id: eventId,
-            description: '',
             start_at: new Date().toISOString(),
             end_at: new Date(Date.now() + DEFAULT_SESSION_DURATION_MS).toISOString(),
             max_seats: null,
             status: 'draft',
+            part: 1,
         } as EventSession;
     }
 
@@ -32,6 +32,7 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
             .from(this.tableName)
             .select(this.select)
             .eq('event_id', eventId)
+            .order('part')
             .order('start_at');
 
         if (error) {

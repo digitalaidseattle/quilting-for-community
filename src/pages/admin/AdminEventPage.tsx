@@ -1,6 +1,7 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { PlusOutlined } from "@ant-design/icons";
+import { NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { HomeOutlined, PlusOutlined } from "@ant-design/icons";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { TimePicker } from "@mui/x-date-pickers/TimePicker";
@@ -10,14 +11,19 @@ import {
     Alert,
     Autocomplete,
     Box,
+    Breadcrumbs,
     Button,
+    Card,
+    CardContent,
     Checkbox,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
     FormControlLabel,
+    IconButton,
     InputAdornment,
+    Link,
     MenuItem,
     Stack,
     TextField,
@@ -25,11 +31,12 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
-import { LoadingContext } from "@digitalaidseattle/core";
+import { LoadingContext, QueryModel } from "@digitalaidseattle/core";
 import { EventCategorySelect } from "../../components/EventCategorySelect";
 import { NumberField } from "../../components/NumberField";
-import { EventsService } from "../../services/events/EventsService";
-import { EventSessionsService } from "../../services/events/EventSessionsService";
+import { TimezoneSelect } from "../../components/TimezoneSelect";
+import { EventsService, normalizeSessionParts } from "../../services/events/EventsService";
+import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventInstructor, EventSession, SessionStatus } from "../../services/events/types";
 import { eventFormResolver } from "../../services/events/eventValidation";
 import { Profile } from "../../services/members/ProfilesDao";
@@ -37,37 +44,29 @@ import { ProfilesService } from "../../services/members/ProfilesService";
 import {
     formatSessionDate,
     defaultNewSessionStart,
+    loadStoredTimezone,
     nowAsWallDate,
+    storeTimezone,
     utcIsoToWallDate,
     wallDateToUtcIso,
 } from "../../utils/date-format";
 
-export type EventDialogProps = {
-    service: EventsService;
-    open: boolean;
-    editing: Event;
-    templateEvents: Event[];
-    timeZone: string;
-    onTimeZoneChange: (timeZone: string) => void;
-    initialSessionId?: string | null;
-    /** Session snapshot from the calendar click — preferred over looking it up in stale state. */
-    initialSession?: EventSession | null;
-    /** When true, only the session dialog is shown (calendar click flow). */
-    sessionOnly?: boolean;
-    onOpenEventDetails?: () => void;
-    onClose: () => void;
-    onSaved: () => void;
-    onInitialSessionOpened?: () => void;
+const TEMPLATES_QUERY: QueryModel = {
+    page: 0,
+    pageSize: 100,
+    sortField: 'name',
+    sortDirection: 'asc',
+    filterModel: { items: [{ field: 'template', operator: 'equals', value: true }] },
 };
 
 type SessionFormValues = {
     id?: string;
     event_id: string;
-    description: string;
     start_at: string;
     end_at: string;
     max_seats: number | null;
     status: SessionStatus;
+    part: number;
     duration: number;
 };
 
@@ -88,11 +87,11 @@ function sessionToFormValues(session: EventSession, duration: number): SessionFo
     return {
         id: session.id as string | undefined,
         event_id: session.event_id,
-        description: session.description ?? '',
         start_at: session.start_at,
         end_at: session.end_at,
         max_seats: session.max_seats,
         status: session.status,
+        part: session.part ?? 1,
         duration,
     };
 }
@@ -122,23 +121,18 @@ function applyStartAndDuration(
     };
 }
 
-export const EventDialog = ({
-    service,
-    open,
-    editing,
-    templateEvents,
-    timeZone,
-    onTimeZoneChange: _onTimeZoneChange,
-    initialSessionId,
-    initialSession = null,
-    sessionOnly = false,
-    onOpenEventDetails,
-    onClose,
-    onSaved,
-    onInitialSessionOpened,
-}: EventDialogProps) => {
-    const { setLoading } = useContext(LoadingContext);
+export const AdminEventPage = () => {
+    const service = EventsService.getInstance();
     const profilesService = ProfilesService.getInstance();
+    const { setLoading } = useContext(LoadingContext);
+    const navigate = useNavigate();
+    const { id } = useParams();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const isNew = !id;
+
+    const [notFound, setNotFound] = useState(false);
+    const [timeZone, setTimeZone] = useState(loadStoredTimezone);
+    const [templateEvents, setTemplateEvents] = useState<Event[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
     const [instructorOptions, setInstructorOptions] = useState<Profile[]>([]);
@@ -154,7 +148,7 @@ export const EventDialog = ({
         handleSubmit,
         formState: { errors },
     } = useForm<Event>({
-        defaultValues: editing,
+        defaultValues: EventsDao.empty(),
         resolver: eventFormResolver,
     });
 
@@ -167,56 +161,73 @@ export const EventDialog = ({
         handleSubmit: handleSubmitSession,
         formState: { errors: sessionErrors },
     } = useForm<SessionFormValues>({
-        defaultValues: sessionToFormValues(editing.event_sessions?.[0] ?? {
-            event_id: (editing.id as string) ?? '',
-            description: '',
+        defaultValues: {
+            event_id: id ?? '',
             start_at: '',
             end_at: '',
             max_seats: null,
             status: 'draft',
-        } as EventSession, 60),
+            part: 1,
+            duration: 60,
+        },
     });
 
     const event = watch();
-    const sessions = event.event_sessions ?? [];
+    const sessions = useMemo(() => event.event_sessions ?? [], [event.event_sessions]);
     const sessionValues = watchSession();
     const selectedInstructor = instructorOptions.find((profile) => profile.id === event.instructor_id)
         ?? (event.instructor && event.instructor_id ? event.instructor as Profile : null);
 
+    const partNumbers = [...new Set(sessions.map((session) => session.part ?? 1))].sort((a, b) => a - b);
+    const maxPart = partNumbers.length > 0 ? partNumbers[partNumbers.length - 1] : 0;
+    const multiPart = maxPart > 1;
+
+    function handleTimeZoneChange(next: string) {
+        setTimeZone(next);
+        storeTimezone(next);
+    }
+
     useEffect(() => {
-        if (!open || sessionOnly) {
-            return;
-        }
         profilesService.getInstructorCandidates()
             .then(setInstructorOptions)
             .catch(() => setInstructorOptions([]));
-    }, [open, sessionOnly, profilesService]);
+    }, [profilesService]);
 
     useEffect(() => {
-        reset(editing);
-        setSelectedTemplateId('');
-        // In session-only mode the calendar already has current session times;
-        // refetching can briefly race a just-finished drag and show stale times.
-        if (editing.id && !sessionOnly) {
-            service.getById(editing.id).then((full) => reset(full ?? editing));
-        }
-    }, [editing, open, sessionOnly, reset, service]);
-
-    useEffect(() => {
-        if (!open) {
+        if (!isNew) {
             return;
         }
+        service.find(TEMPLATES_QUERY, { select: '*' }).then((page) => setTemplateEvents(page.rows));
+    }, [isNew, service]);
 
-        const session = initialSession
-            ?? (initialSessionId ? sessions.find((s) => s.id === initialSessionId) : undefined);
+    useEffect(() => {
+        if (isNew) {
+            reset(EventsDao.empty());
+            return;
+        }
+        service.getById(id).then((full) => {
+            if (full) {
+                reset(full);
+            } else {
+                setNotFound(true);
+            }
+        });
+    }, [id, isNew, reset, service]);
+
+    // Calendar clicks land here with ?session=<id>; open that session's dialog once.
+    const initialSessionId = searchParams.get('session');
+    useEffect(() => {
+        if (!initialSessionId) {
+            return;
+        }
+        const session = sessions.find((s) => s.id === initialSessionId);
         if (!session) {
             return;
         }
-
         resetSession(sessionToFormValues(session, durationMinutes(session, event.duration)));
         setSessionDialogOpen(true);
-        onInitialSessionOpened?.();
-    }, [open, initialSession, initialSessionId, sessions, onInitialSessionOpened, resetSession, event.duration]);
+        setSearchParams({}, { replace: true });
+    }, [initialSessionId, sessions, resetSession, setSearchParams, event.duration]);
 
     function applyTemplate(templateId: string) {
         setSelectedTemplateId(templateId);
@@ -235,20 +246,20 @@ export const EventDialog = ({
         setLoading(true);
         try {
             await service.save(values);
-            onSaved();
-            onClose();
+            navigate('/admin/event-management');
         } finally {
             setLoading(false);
         }
     }
 
-    function openNewSession() {
+    function openNewSession(part: number) {
         const startWall = defaultNewSessionStart(timeZone);
         const duration = defaultDurationMinutes(event.duration);
         const endWall = new Date(startWall.getTime() + duration * 60000);
         const draft = service.sessionFromEvent(event, {
             start_at: wallDateToUtcIso(startWall, timeZone),
             end_at: wallDateToUtcIso(endWall, timeZone),
+            part,
         });
         resetSession(sessionToFormValues(draft, duration));
         setSessionDialogOpen(true);
@@ -257,13 +268,6 @@ export const EventDialog = ({
     function openEditSession(session: EventSession) {
         resetSession(sessionToFormValues(session, durationMinutes(session, event.duration)));
         setSessionDialogOpen(true);
-    }
-
-    function closeSessionDialog() {
-        setSessionDialogOpen(false);
-        if (sessionOnly) {
-            onClose();
-        }
     }
 
     function sessionStartWall(): Date | null {
@@ -315,24 +319,12 @@ export const EventDialog = ({
         };
     }
 
-    async function onSaveSession(values: SessionFormValues) {
+    function onSaveSession(values: SessionFormValues) {
         const normalized = buildNormalizedSession(values);
         if (!normalized) return;
 
-        if (sessionOnly) {
-            setLoading(true);
-            try {
-                await EventSessionsService.getInstance().upsert(normalized);
-                onSaved();
-                onClose();
-            } finally {
-                setLoading(false);
-            }
-            return;
-        }
-
         const others = sessions.filter((session) => session.id !== normalized.id);
-        setValue('event_sessions', [...others, normalized].sort((a, b) => a.start_at.localeCompare(b.start_at)), {
+        setValue('event_sessions', normalizeSessionParts([...others, normalized]), {
             shouldValidate: true,
         });
         clearErrors('event_sessions');
@@ -347,25 +339,14 @@ export const EventDialog = ({
             try {
                 await service.delete(event.id);
                 setConfirmDelete(null);
-                onSaved();
-                onClose();
-            } finally {
-                setLoading(false);
-            }
-        } else if (sessionOnly && confirmDelete.session.id) {
-            setLoading(true);
-            try {
-                await EventSessionsService.getInstance().delete(confirmDelete.session.id);
-                setConfirmDelete(null);
-                onSaved();
-                onClose();
+                navigate('/admin/event-management');
             } finally {
                 setLoading(false);
             }
         } else {
             setValue(
                 'event_sessions',
-                sessions.filter((session) => session.id !== confirmDelete.session.id),
+                normalizeSessionParts(sessions.filter((session) => session.id !== confirmDelete.session.id)),
             );
             setConfirmDelete(null);
             setSessionDialogOpen(false);
@@ -393,6 +374,7 @@ export const EventDialog = ({
             headerName: '',
             width: 160,
             sortable: false,
+            display: 'flex' as const,
             renderCell: (params: { row: EventSession }) => (
                 <Stack direction="row" spacing={1}>
                     <Button size="small" onClick={() => openEditSession(params.row)}>Edit</Button>
@@ -406,13 +388,72 @@ export const EventDialog = ({
     const sessionDurationError = sessionErrors.duration?.message;
     const sessionMaxSeatsError = sessionErrors.max_seats?.message;
 
+    function renderSessionGrid(rows: EventSession[]) {
+        return (
+            <Box
+                sx={{
+                    bgcolor: 'grey.50',
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                }}
+            >
+                <DataGrid
+                    rows={rows}
+                    columns={sessionColumns}
+                    autoHeight
+                    disableRowSelectionOnClick
+                    hideFooter={rows.length <= 5}
+                    pageSizeOptions={[5, 10]}
+                    initialState={{ pagination: { paginationModel: { pageSize: 5 } } }}
+                    sx={{
+                        border: 'none',
+                        bgcolor: 'transparent',
+                        '& .MuiDataGrid-columnHeaders, & .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller, & .MuiDataGrid-cell, & .MuiDataGrid-row': {
+                            bgcolor: 'transparent',
+                        },
+                        '& .MuiDataGrid-cell': {
+                            px: 1.5,
+                        },
+                        '& .MuiDataGrid-columnHeader': {
+                            px: 1.5,
+                        },
+                    }}
+                />
+            </Box>
+        );
+    }
+
+    if (notFound) {
+        return (
+            <Stack spacing={2}>
+                <Alert severity="error">Event not found.</Alert>
+                <Box>
+                    <Button variant="contained" onClick={() => navigate('/admin/event-management')}>
+                        Back to Event Management
+                    </Button>
+                </Box>
+            </Stack>
+        );
+    }
+
     return (
         <>
-            <Dialog open={open && !sessionOnly} onClose={onClose} maxWidth="md" fullWidth>
-                <DialogTitle>{event.id ? 'Edit event' : 'New event'}</DialogTitle>
-                <DialogContent>
-                    <Stack spacing={2} sx={{ mt: 1 }}>
-                        {!event.id && templateEvents.length > 0 && (
+            <Breadcrumbs sx={{ mb: 2 }}>
+                <NavLink to="/"><IconButton size="medium"><HomeOutlined /></IconButton></NavLink>
+                <Link component={NavLink} to="/admin/event-management" underline="hover" color="inherit">
+                    Event Management
+                </Link>
+                <Typography color="text.primary">
+                    {isNew ? 'New event' : (event.name || 'Edit event')}
+                </Typography>
+            </Breadcrumbs>
+
+            <Card>
+                <CardContent>
+                    <Stack spacing={2}>
+                        {isNew && templateEvents.length > 0 && (
                             <TextField
                                 select
                                 label="Clone from template"
@@ -648,63 +689,78 @@ export const EventDialog = ({
                         <Stack spacing={1}>
                             <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1}>
                                 <Typography variant="subtitle1">Sessions{event.template ? '' : ' *'}</Typography>
-                                <Button size="small" startIcon={<PlusOutlined />} onClick={openNewSession}>
-                                    Add session
-                                </Button>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                    <TimezoneSelect value={timeZone} onChange={handleTimeZoneChange} />
+                                    {!multiPart && (
+                                        <Button size="small" startIcon={<PlusOutlined />} onClick={() => openNewSession(1)}>
+                                            Add session
+                                        </Button>
+                                    )}
+                                </Stack>
                             </Stack>
                             {typeof errors.event_sessions?.message === 'string' && errors.event_sessions.message && (
                                 <Alert severity="error">{errors.event_sessions.message}</Alert>
                             )}
-                            <Box
-                                sx={{
-                                    bgcolor: 'grey.50',
-                                    border: 1,
-                                    borderColor: 'divider',
-                                    borderRadius: 1,
-                                    overflow: 'hidden',
-                                }}
-                            >
-                                <DataGrid
-                                    rows={sessions}
-                                    columns={sessionColumns}
-                                    autoHeight
-                                    disableRowSelectionOnClick
-                                    hideFooter={sessions.length <= 5}
-                                    pageSizeOptions={[5, 10]}
-                                    initialState={{ pagination: { paginationModel: { pageSize: 5 } } }}
-                                    sx={{
-                                        border: 'none',
-                                        bgcolor: 'transparent',
-                                        '& .MuiDataGrid-columnHeaders, & .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller, & .MuiDataGrid-cell, & .MuiDataGrid-row': {
-                                            bgcolor: 'transparent',
-                                        },
-                                        '& .MuiDataGrid-cell': {
-                                            px: 1.5,
-                                        },
-                                        '& .MuiDataGrid-columnHeader': {
-                                            px: 1.5,
-                                        },
-                                    }}
-                                />
+                            {multiPart ? (
+                                <Stack spacing={2}>
+                                    {partNumbers.map((part) => (
+                                        <Stack key={part} spacing={1}>
+                                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                                <Typography variant="subtitle2">Part {part}</Typography>
+                                                <Button size="small" startIcon={<PlusOutlined />} onClick={() => openNewSession(part)}>
+                                                    Add session
+                                                </Button>
+                                            </Stack>
+                                            {renderSessionGrid(sessions.filter((session) => session.part === part))}
+                                        </Stack>
+                                    ))}
+                                </Stack>
+                            ) : (
+                                renderSessionGrid(sessions)
+                            )}
+                            <Box>
+                                <Button
+                                    size="small"
+                                    startIcon={<PlusOutlined />}
+                                    disabled={sessions.length === 0}
+                                    onClick={() => openNewSession(maxPart + 1)}
+                                >
+                                    Add another part
+                                </Button>
                             </Box>
+                            {multiPart && (
+                                <Typography variant="caption" color="text.secondary">
+                                    Participants will register for the whole class and pick one session from each part.
+                                </Typography>
+                            )}
+                        </Stack>
+
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            {event.id ? (
+                                <Button color="error" onClick={() => setConfirmDelete({ type: 'event' })}>
+                                    Delete event
+                                </Button>
+                            ) : (
+                                <span />
+                            )}
+                            <Stack direction="row" spacing={1}>
+                                <Button onClick={() => navigate('/admin/event-management')}>Cancel</Button>
+                                <Button variant="contained" onClick={handleSubmit(onSaveEvent)}>Save event</Button>
+                            </Stack>
                         </Stack>
                     </Stack>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={onClose}>Cancel</Button>
-                    <Button variant="contained" onClick={handleSubmit(onSaveEvent)}>Save event</Button>
-                </DialogActions>
-            </Dialog>
+                </CardContent>
+            </Card>
 
             <Dialog
-                open={open && sessionDialogOpen}
-                onClose={closeSessionDialog}
+                open={sessionDialogOpen}
+                onClose={() => setSessionDialogOpen(false)}
                 maxWidth="sm"
                 fullWidth
             >
                 <DialogTitle>
                     {sessionValues.id ? 'Edit session' : 'New session'}
-                    {sessionOnly && event.name ? ` · ${event.name}` : ''}
+                    {(multiPart || sessionValues.part > 1) ? ` · Part ${sessionValues.part}` : ''}
                 </DialogTitle>
                 <DialogContent>
                     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -751,20 +807,6 @@ export const EventDialog = ({
                                     }}
                                 />
                             </Stack>
-                            <Controller
-                                name="description"
-                                control={sessionControl}
-                                render={({ field }) => (
-                                    <TextField
-                                        label="Description"
-                                        value={field.value}
-                                        onChange={field.onChange}
-                                        multiline
-                                        rows={3}
-                                        fullWidth
-                                    />
-                                )}
-                            />
                             <Stack direction="row" spacing={2} alignItems="flex-start">
                                 <Controller
                                     name="duration"
@@ -870,15 +912,7 @@ export const EventDialog = ({
                         <span />
                     )}
                     <Stack direction="row" spacing={1} alignItems="center">
-                        {sessionOnly && onOpenEventDetails && (
-                            <Button onClick={() => {
-                                setSessionDialogOpen(false);
-                                onOpenEventDetails();
-                            }}>
-                                Edit event
-                            </Button>
-                        )}
-                        <Button onClick={closeSessionDialog}>Cancel</Button>
+                        <Button onClick={() => setSessionDialogOpen(false)}>Cancel</Button>
                         <Button variant="contained" onClick={handleSubmitSession(onSaveSession)}>Save session</Button>
                     </Stack>
                 </DialogActions>
@@ -891,9 +925,7 @@ export const EventDialog = ({
                     confirmDelete?.type === 'event'
                         ? `Delete "${event.name}" and all of its sessions? This cannot be undone.`
                         : confirmDelete?.type === 'session'
-                            ? sessionOnly
-                                ? `Delete this session starting ${formatSessionDate(confirmDelete.session.start_at, timeZone)}? This cannot be undone.`
-                                : `Remove this session starting ${formatSessionDate(confirmDelete.session.start_at, timeZone)}? It will be deleted when you save the event.`
+                            ? `Remove this session starting ${formatSessionDate(confirmDelete.session.start_at, timeZone)}? It will be deleted when you save the event.`
                             : ''
                 }
                 handleConfirm={handleConfirmDelete}

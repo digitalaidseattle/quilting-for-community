@@ -11,6 +11,19 @@ export function buildEventSearchKey(event: Pick<Event, 'name' | 'description' | 
     return `${event.name ?? ''}@${event.description ?? ''}@${event.category ?? ''}`;
 }
 
+/**
+ * Renumbers session parts so they stay contiguous from 1 (e.g. deleting all
+ * of part 2 of 3 turns the old part 3 into part 2). Also sorts by part, then
+ * start time, which is the display order everywhere.
+ */
+export function normalizeSessionParts(sessions: EventSession[]): EventSession[] {
+    const parts = [...new Set(sessions.map((session) => session.part))].sort((a, b) => a - b);
+    const renumbered = new Map(parts.map((part, index) => [part, index + 1]));
+    return sessions
+        .map((session) => ({ ...session, part: renumbered.get(session.part) as number }))
+        .sort((a, b) => a.part - b.part || a.start_at.localeCompare(b.start_at));
+}
+
 // Handles both events and their sessions
 export class EventsService {
     private static instance: EventsService;
@@ -47,14 +60,15 @@ export class EventsService {
             : await this.events.insert(payload as Event);
 
         if (event_sessions) {
+            const normalized = normalizeSessionParts(event_sessions);
             const existing = event.id ? await this.sessions.getByEventId(saved.id as string) : [];
-            const keptIds = new Set(event_sessions.map((session) => session.id));
+            const keptIds = new Set(normalized.map((session) => session.id));
 
             await Promise.all([
                 ...existing
                     .filter((session) => !keptIds.has(session.id))
                     .map((session) => this.sessions.delete(session.id as string)),
-                ...event_sessions.map((session) => this.sessions.upsert({
+                ...normalized.map((session) => this.sessions.upsert({
                     ...session,
                     event_id: saved.id as string,
                 })),
@@ -75,8 +89,8 @@ export class EventsService {
         }
         const {
             id: _id,
-            created_at,
-            updated_at,
+            created_at: _createdAt,
+            updated_at: _updatedAt,
             event_sessions,
             instructor: _instructor,
             ...rest
@@ -105,11 +119,11 @@ export class EventsService {
 
         return {
             event_id: event.id as string,
-            description: overrides.description ?? '',
             start_at: start,
             end_at: end,
             max_seats: overrides.max_seats ?? null,
             status: overrides.status ?? 'draft',
+            part: overrides.part ?? 1,
         } as EventSession;
     }
 }

@@ -28,9 +28,9 @@ export type Event = Entity & {
 
 export type EventSession = Entity & {
     event_id: string;
-    description: string;
     start_at: string;
     end_at: string;
     max_seats: number | null;
     status: SessionStatus;
+    part: number;
 };
