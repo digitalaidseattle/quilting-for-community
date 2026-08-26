@@ -27,6 +27,7 @@ import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventSession } from "../../services/events/types";
 import { ProfilesService } from "../../services/members/ProfilesService";
 import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
+import { escapeIlikePattern } from "../../utils/ilike";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
 import { EventDialog } from "./EventDialog";
 
@@ -75,7 +76,7 @@ export const AdminEventManagementPage = () => {
     function searchFilterItems(): FilterItem[] {
         const term = search.trim();
         if (!term) return [];
-        return [{ field: 'search_key', operator: 'contains', value: term }];
+        return [{ field: 'search_key', operator: 'contains', value: escapeIlikePattern(term) }];
     }
 
     function handleSearchChange(value: string) {
