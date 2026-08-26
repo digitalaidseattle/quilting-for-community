@@ -14,6 +14,7 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
             max_seats: null,
             status: 'draft',
             part: 1,
+            instructor_id: null,
         } as EventSession;
     }
 
@@ -21,7 +22,8 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
         if (!EventSessionsDao.instance) {
             EventSessionsDao.instance = new EventSessionsDao(
                 SupabaseConfiguration.getInstance().getSupabaseClient(),
-                'event_sessions'
+                'event_sessions',
+                { select: '*, instructor:profiles!instructor_id(id, name, email, first_name, last_name)' }
             );
         }
         return EventSessionsDao.instance;

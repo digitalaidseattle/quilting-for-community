@@ -67,6 +67,8 @@ type SessionFormValues = {
     max_seats: number | null;
     status: SessionStatus;
     part: number;
+    instructor_id: string | null;
+    instructor?: EventInstructor | null;
     duration: number;
 };
 
@@ -92,6 +94,8 @@ function sessionToFormValues(session: EventSession, duration: number): SessionFo
         max_seats: session.max_seats,
         status: session.status,
         part: session.part ?? 1,
+        instructor_id: session.instructor_id ?? null,
+        instructor: session.instructor ?? null,
         duration,
     };
 }
@@ -159,6 +163,7 @@ export const AdminEventPage = () => {
         getValues: getSessionValues,
         watch: watchSession,
         handleSubmit: handleSubmitSession,
+        trigger: triggerSession,
         formState: { errors: sessionErrors },
     } = useForm<SessionFormValues>({
         defaultValues: {
@@ -168,6 +173,8 @@ export const AdminEventPage = () => {
             max_seats: null,
             status: 'draft',
             part: 1,
+            instructor_id: null,
+            instructor: null,
             duration: 60,
         },
     });
@@ -175,8 +182,8 @@ export const AdminEventPage = () => {
     const event = watch();
     const sessions = useMemo(() => event.event_sessions ?? [], [event.event_sessions]);
     const sessionValues = watchSession();
-    const selectedInstructor = instructorOptions.find((profile) => profile.id === event.instructor_id)
-        ?? (event.instructor && event.instructor_id ? event.instructor as Profile : null);
+    const selectedInstructor = instructorOptions.find((profile) => profile.id === sessionValues.instructor_id)
+        ?? (sessionValues.instructor && sessionValues.instructor_id ? sessionValues.instructor as Profile : null);
 
     const partNumbers = [...new Set(sessions.map((session) => session.part ?? 1))].sort((a, b) => a - b);
     const maxPart = partNumbers.length > 0 ? partNumbers[partNumbers.length - 1] : 0;
@@ -370,6 +377,14 @@ export const AdminEventPage = () => {
         },
         { field: 'status', headerName: 'Status', width: 110 },
         {
+            field: 'instructor',
+            headerName: 'Instructor',
+            flex: 1,
+            minWidth: 120,
+            valueGetter: (_: unknown, row: EventSession) =>
+                row.instructor ? profilesService.profileLabel(row.instructor) : '',
+        },
+        {
             field: 'actions',
             headerName: '',
             width: 160,
@@ -513,69 +528,16 @@ export const AdminEventPage = () => {
                                 )}
                             />
                         </Stack>
-                        <Stack direction="row" spacing={2}>
-                            <Controller
-                                name="category"
-                                control={control}
-                                render={({ field }) => (
-                                    <EventCategorySelect
-                                        value={field.value}
-                                        onChange={field.onChange}
-                                        sx={{ flex: 1 }}
-                                    />
-                                )}
-                            />
-                            <Controller
-                                name="instructor_id"
-                                control={control}
-                                render={({ field }) => (
-                                    <Autocomplete
-                                        options={instructorOptions}
-                                        value={selectedInstructor}
-                                        onChange={(_event, profile) => {
-                                            field.onChange((profile?.id as string) ?? null);
-                                            setValue('instructor', profile ? toInstructor(profile) : null);
-                                        }}
-                                        getOptionLabel={(profile) => profilesService.profileLabel(profile)}
-                                        isOptionEqualToValue={(a, b) => a.id === b.id}
-                                        filterOptions={(options, state) => {
-                                            const query = state.inputValue.trim().toLowerCase();
-                                            if (!query) return options;
-                                            return options.filter((profile) => {
-                                                const haystack = [
-                                                    profile.name,
-                                                    profile.email,
-                                                    profile.first_name,
-                                                    profile.last_name,
-                                                    profilesService.profileLabel(profile),
-                                                ].filter(Boolean).join(' ').toLowerCase();
-                                                return haystack.includes(query);
-                                            });
-                                        }}
-                                        renderOption={(props, profile) => (
-                                            <li {...props} key={profile.id as string}>
-                                                <Stack>
-                                                    <Typography variant="body2">{profilesService.profileLabel(profile)}</Typography>
-                                                    {profile.email && profilesService.profileLabel(profile) !== profile.email && (
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            {profile.email}
-                                                        </Typography>
-                                                    )}
-                                                </Stack>
-                                            </li>
-                                        )}
-                                        renderInput={(params) => (
-                                            <TextField
-                                                {...params}
-                                                label="Instructor"
-                                                slotProps={{ inputLabel: { shrink: Boolean(selectedInstructor) || Boolean(params.inputProps?.value) } }}
-                                            />
-                                        )}
-                                        sx={{ flex: 1 }}
-                                    />
-                                )}
-                            />
-                        </Stack>
+                        <Controller
+                            name="category"
+                            control={control}
+                            render={({ field }) => (
+                                <EventCategorySelect
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                />
+                            )}
+                        />
                         <Stack direction="row" spacing={2} alignItems="flex-start">
                             <Stack direction="row" spacing={2} sx={{ flex: 1 }}>
                                 <Controller
@@ -604,7 +566,6 @@ export const AdminEventPage = () => {
                                             value={field.value}
                                             onChange={field.onChange}
                                             min={1}
-                                            required
                                             error={Boolean(fieldState.error)}
                                             helperText={fieldState.error?.message ?? 'Used when adding new sessions'}
                                             sx={{ flex: 1 }}
@@ -620,7 +581,6 @@ export const AdminEventPage = () => {
                                             value={field.value}
                                             onChange={field.onChange}
                                             min={0}
-                                            required
                                             error={Boolean(fieldState.error)}
                                             helperText={fieldState.error?.message}
                                             sx={{ flex: 1 }}
@@ -641,7 +601,6 @@ export const AdminEventPage = () => {
                                             value={field.value}
                                             onChange={field.onChange}
                                             min={1}
-                                            required
                                             error={Boolean(fieldState.error)}
                                             helperText={fieldState.error?.message}
                                             sx={{ flex: 1 }}
@@ -688,7 +647,7 @@ export const AdminEventPage = () => {
 
                         <Stack spacing={1}>
                             <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1}>
-                                <Typography variant="subtitle1">Sessions{event.template ? '' : ' *'}</Typography>
+                                <Typography variant="subtitle1">Sessions</Typography>
                                 <Stack direction="row" spacing={1} alignItems="center">
                                     <TimezoneSelect value={timeZone} onChange={handleTimeZoneChange} />
                                     {!multiPart && (
@@ -807,6 +766,63 @@ export const AdminEventPage = () => {
                                     }}
                                 />
                             </Stack>
+                            <Controller
+                                name="instructor_id"
+                                control={sessionControl}
+                                rules={{
+                                    validate: (value, values) =>
+                                        values.status !== 'published' || Boolean(value)
+                                        || 'Assign an instructor before publishing',
+                                }}
+                                render={({ field, fieldState }) => (
+                                    <Autocomplete
+                                        options={instructorOptions}
+                                        value={selectedInstructor ?? null}
+                                        onChange={(_event, profile) => {
+                                            field.onChange((profile?.id as string) ?? null);
+                                            setSessionValue('instructor', profile ? toInstructor(profile) : null);
+                                        }}
+                                        getOptionLabel={(profile) => profilesService.profileLabel(profile)}
+                                        isOptionEqualToValue={(a, b) => a.id === b.id}
+                                        filterOptions={(options, state) => {
+                                            const query = state.inputValue.trim().toLowerCase();
+                                            if (!query) return options;
+                                            return options.filter((profile) => {
+                                                const haystack = [
+                                                    profile.name,
+                                                    profile.email,
+                                                    profile.first_name,
+                                                    profile.last_name,
+                                                    profilesService.profileLabel(profile),
+                                                ].filter(Boolean).join(' ').toLowerCase();
+                                                return haystack.includes(query);
+                                            });
+                                        }}
+                                        renderOption={(props, profile) => (
+                                            <li {...props} key={profile.id as string}>
+                                                <Stack>
+                                                    <Typography variant="body2">{profilesService.profileLabel(profile)}</Typography>
+                                                    {profile.email && profilesService.profileLabel(profile) !== profile.email && (
+                                                        <Typography variant="caption" color="text.secondary">
+                                                            {profile.email}
+                                                        </Typography>
+                                                    )}
+                                                </Stack>
+                                            </li>
+                                        )}
+                                        renderInput={(params) => (
+                                            <TextField
+                                                {...params}
+                                                label="Instructor"
+                                                required={sessionValues.status === 'published'}
+                                                error={Boolean(fieldState.error)}
+                                                helperText={fieldState.error?.message ?? 'Required to publish'}
+                                                slotProps={{ inputLabel: { shrink: Boolean(selectedInstructor) || Boolean(params.inputProps?.value) } }}
+                                            />
+                                        )}
+                                    />
+                                )}
+                            />
                             <Stack direction="row" spacing={2} alignItems="flex-start">
                                 <Controller
                                     name="duration"
@@ -844,7 +860,10 @@ export const AdminEventPage = () => {
                                             select
                                             label="Status"
                                             value={field.value}
-                                            onChange={field.onChange}
+                                            onChange={(e) => {
+                                                field.onChange(e);
+                                                void triggerSession('instructor_id');
+                                            }}
                                             sx={{ flex: 1, minWidth: 140 }}
                                         >
                                             <MenuItem value="draft">Draft</MenuItem>

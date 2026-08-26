@@ -11,8 +11,6 @@ export type Event = Entity & {
     description: string;
     notes: string;
     category: string;
-    instructor_id: string | null;
-    instructor?: EventInstructor | null;
     duration: number;
     max_seats: number;
     volunteer_seat_count: number;
@@ -33,4 +31,6 @@ export type EventSession = Entity & {
     max_seats: number | null;
     status: SessionStatus;
     part: number;
+    instructor_id: string | null;
+    instructor?: EventInstructor | null;
 };

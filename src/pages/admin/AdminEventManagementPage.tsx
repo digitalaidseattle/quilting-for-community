@@ -24,7 +24,6 @@ import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
 import { EventsService } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { Event, EventSession } from "../../services/events/types";
-import { ProfilesService } from "../../services/members/ProfilesService";
 import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
 
@@ -86,9 +85,7 @@ export const AdminEventManagementPage = () => {
         } as QueryModel;
 
         setLoading(true);
-        service.find(queryModel, {
-            select: '*, instructor:profiles!instructor_id(id, name, email, first_name, last_name)',
-        })
+        service.find(queryModel, { select: '*' })
             .then(setPageInfo)
             .finally(() => setLoading(false));
     }
@@ -182,16 +179,6 @@ export const AdminEventManagementPage = () => {
             valueGetter: (_: unknown, row: Event) =>
                 categoryOptions.find((option) => option.value === row.category)?.label
                 ?? row.category,
-        },
-        {
-            field: 'instructor',
-            headerName: 'Instructor',
-            width: 160,
-            sortable: false,
-            valueGetter: (_: unknown, row: Event) =>
-                row.instructor
-                    ? ProfilesService.getInstance().profileLabel(row.instructor)
-                    : '',
         },
         { field: 'max_seats', headerName: 'Seats', width: 80 },
         {

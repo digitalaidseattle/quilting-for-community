@@ -50,7 +50,7 @@ export class EventsService {
 
     // Inserts or updates the event and its sessions
     async save(event: Event): Promise<Event> {
-        const { event_sessions, instructor: _instructor, ...fields } = event;
+        const { event_sessions, ...fields } = event;
         const payload = {
             ...fields,
             search_key: buildEventSearchKey(fields),
@@ -68,10 +68,10 @@ export class EventsService {
                 ...existing
                     .filter((session) => !keptIds.has(session.id))
                     .map((session) => this.sessions.delete(session.id as string)),
-                ...normalized.map((session) => this.sessions.upsert({
+                ...normalized.map(({ instructor: _instructor, ...session }) => this.sessions.upsert({
                     ...session,
                     event_id: saved.id as string,
-                })),
+                } as EventSession)),
             ]);
         }
 
@@ -92,7 +92,6 @@ export class EventsService {
             created_at: _createdAt,
             updated_at: _updatedAt,
             event_sessions,
-            instructor: _instructor,
             ...rest
         } = source;
         return this.save({
@@ -124,6 +123,7 @@ export class EventsService {
             max_seats: overrides.max_seats ?? null,
             status: overrides.status ?? 'draft',
             part: overrides.part ?? 1,
+            instructor_id: overrides.instructor_id ?? null,
         } as EventSession;
     }
 }
