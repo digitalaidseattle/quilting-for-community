@@ -12,12 +12,12 @@ describe("ProfilesService unit tests", () => {
         service = new ProfilesService(mockDao);
     });
 
-    test("update should strip id, uid, and roles", async () => {
+    test("update should strip id, auth_id, and roles", async () => {
         expect.assertions(1);
 
         const updateData: Partial<Profile> = {
             id: "mock-profiles-uuid",
-            uid: "mock-users-uuid",
+            auth_id: "mock-users-uuid",
             email: "keep@example.org",
             phone: "7605555555",
             roles: ["member", "admin"],
@@ -36,7 +36,7 @@ describe("ProfilesService unit tests", () => {
     test("upsert should strip roles", async () => {
         const profileData: Profile = {
             id: "mock-profiles-uuid",
-            uid: "mock-users-uuid",
+            auth_id: "mock-users-uuid",
             name: "Test Profile",
             first_name: "Test",
             last_name: "Profile",
@@ -50,7 +50,7 @@ describe("ProfilesService unit tests", () => {
 
         expect(mockDao.upsert).toHaveBeenCalledWith({
             id: profileData.id,
-            uid: profileData.uid,
+            auth_id: profileData.auth_id,
             name: profileData.name,
             first_name: profileData.first_name,
             last_name: profileData.last_name,

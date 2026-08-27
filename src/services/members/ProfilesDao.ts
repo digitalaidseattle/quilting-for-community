@@ -9,7 +9,7 @@ import { DataAccessOptions, Entity, Identifier, QueryModel } from "@digitalaidse
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 
 export type Profile = Entity & {
-    uid: string | null;
+    auth_id: string | null;
     name: string;
     first_name?: string;
     last_name?: string;
@@ -38,7 +38,7 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
         return super.upsert(entity as Profile, opts);
     }
 
-    async getByUid(uid: Identifier): Promise<Profile | null> {
+    async getByAuthId(authId: Identifier): Promise<Profile | null> {
         const query: QueryModel = {
             page: 0,
             pageSize: 1,  // expecting one result
@@ -47,9 +47,9 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
             filterModel: {
                 items: [
                     {
-                        field: "uid",
+                        field: "auth_id",
                         operator: "=",
-                        value: uid
+                        value: authId
                     }
                 ]
             },
@@ -60,7 +60,7 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
 
             return rows && rows.length > 0 ? rows[0] : null;
         } catch (err) {
-            console.log("getByUid error: ", err);
+            console.log("getByAuthId error: ", err);
             throw err;
         }
     }
