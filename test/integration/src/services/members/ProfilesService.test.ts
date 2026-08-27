@@ -202,6 +202,24 @@ describe("ProfilesService", () => {
             expect(profileAfter?.auth_id).toBeNull();
         });
 
+        test("auth_id cannot be reassigned to a different auth user", async () => {
+            expect.assertions(1);
+
+            const user = testUsers[2];
+            const otherUser = testUsers[3];
+            const profileId = testProfiles[user.id];
+
+            // ProfilesService.update() strips auth_id from the payload, so this
+            // goes straight through the client to exercise the DB-level guard
+            // in enforce_profile_role_management().
+            const { error } = await serviceRoleClient
+                .from("profiles")
+                .update({ auth_id: otherUser.id })
+                .eq("id", profileId);
+
+            expect(error).not.toBeNull();
+        });
+
         test("login-less profile can be created directly with a null auth_id", async () => {
             expect.assertions(2);
 
@@ -388,6 +406,25 @@ describe("ProfilesService", () => {
             expect(profile.auth_id).toBeNull();
         });
 
+        test("insert cannot set auth_id or roles directly", async () => {
+            expect.assertions(1);
+
+            // the insert grant only covers name/first_name/last_name/email/phone/
+            // waiver_accepted; explicitly setting auth_id here would let an admin
+            // backdoor-link a profile. The DB rejects it (permission denied for
+            // column auth_id), but ProfilesDao.insert() doesn't surface DB errors
+            // as a rejection (see SupabaseDAO.insert), so it resolves to null.
+            const profile = await adminProfileService.insert({
+                name: "Backdoor Link Attempt",
+                email: `PROFILE_SERVICE_TEST_NOLOGIN_BACKDOOR_${Date.now()}@example.com`,
+                phone: "",
+                waiver_accepted: false,
+                auth_id: testUsers[0].id,
+            } as Profile);
+
+            expect(profile).toBeNull();
+        });
+
         test("getById and update work on a login-less profile", async () => {
             expect.assertions(2);
 
@@ -452,6 +489,19 @@ describe("ProfilesService", () => {
                 .eq("auth_id", nonAdminUser.id)
                 .single();
             expect(profile).toMatchObject(expectedProfile);
+        });
+
+        test("select is scoped to own profile only", async () => {
+            expect.assertions(2);
+
+            // profiles_non_admin_read (using (true)) used to make this return
+            // every profile; profiles_select_own_or_admin should now scope it.
+            const { data, error } = await supabaseClient
+                .from("profiles")
+                .select("id");
+
+            expect(error).toBeNull();
+            expect(data).toEqual([{ id: nonAdminProfileId }]);
         });
 
         test("update should fail on another profile", async () => {
