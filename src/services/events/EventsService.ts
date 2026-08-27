@@ -37,7 +37,7 @@ export class EventsService {
 
     // Inserts or updates the event and its sessions
     async save(event: Event): Promise<Event> {
-        const { event_sessions, ...fields } = event;
+        const { event_sessions, instructor: _instructor, ...fields } = event;
         const payload = {
             ...fields,
             search_key: buildEventSearchKey(fields),
@@ -73,7 +73,14 @@ export class EventsService {
         if (!source) {
             throw new Error(`Event not found: ${id}`);
         }
-        const { id: _id, created_at, updated_at, event_sessions, ...rest } = source;
+        const {
+            id: _id,
+            created_at,
+            updated_at,
+            event_sessions,
+            instructor: _instructor,
+            ...rest
+        } = source;
         return this.save({
             ...rest,
             ...overrides,
@@ -93,7 +100,7 @@ export class EventsService {
 
     sessionFromEvent(event: Event, overrides: Partial<EventSession>): EventSession {
         const start = overrides.start_at ?? new Date().toISOString();
-        const duration = event.duration;
+        const duration = Math.max(1, event.duration || 60);
         const end = overrides.end_at ?? new Date(new Date(start).getTime() + duration * 60000).toISOString();
 
         return {

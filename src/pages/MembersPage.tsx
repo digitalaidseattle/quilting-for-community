@@ -10,13 +10,14 @@ import { HomeOutlined } from "@ant-design/icons";
 import { Breadcrumbs, Card, CardContent, IconButton, Stack, Typography } from '@mui/material';
 import {
   DataGrid,
+  GridFilterModel,
   GridRowParams,
   GridSortModel,
   useGridApiRef
 } from '@mui/x-data-grid';
 
 
-import { LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
+import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useNotifications } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/Data";
 import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
@@ -27,8 +28,12 @@ import { ProfilesService } from "../services/members/ProfilesService";
 
 export const MembersPage = () => {
   const profilesService = ProfilesService.getInstance();
+  const notifications = useNotifications();
+
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'email', sort: 'asc' }]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
+
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
   const apiRef = useGridApiRef();
   const { setLoading } = useContext(LoadingContext);
@@ -48,20 +53,16 @@ export const MembersPage = () => {
     }
   ];
 
+  // API data fetch, uncomment to replace dummy data with real data
   const fetchData = useCallback(() => {
-    if (paginationModel && sortModel) {
-      const queryModel = {
-        page: paginationModel.page,
-        pageSize: paginationModel.pageSize,
-        sortField: sortModel.length === 0 ? 'created_at' : sortModel[0].field,
-        sortDirection: sortModel.length === 0 ? 'created_at' : sortModel[0].sort
-      } as QueryModel;
-
-      setLoading(true);
-      profilesService.find(queryModel)
-        .then((sess) => setPageInfo(sess))
-        .finally(() => setLoading(false))
-    }
+    profilesService
+      .find(createQueryModel())
+      .then(data => setPageInfo(data))
+      .catch(err => {
+        notifications.error('Error fetching profiles.');
+        console.error('Error fetching profiles:', err);
+      })
+      .finally(() => setLoading(false));
 
   }, [paginationModel, profilesService, setLoading, sortModel]);
 
@@ -69,8 +70,31 @@ export const MembersPage = () => {
     fetchData();
   }, [fetchData, refresh])
 
+
+  function createQueryModel(): QueryModel {
+    const filterItems: FilterItem[] = [];
+    if (filterModel && filterModel.items.length > 0) {
+      const filterItem = filterModel.items[0];
+      filterItems.push({
+        field: filterItem.field,
+        operator: filterItem.operator,
+        value: filterItem.value
+      })
+    }
+    const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
+    const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
+    return {
+      ...paginationModel,
+      sortField: sortField,
+      sortDirection: sortDirection,
+      filterModel: {
+        items: filterItems
+      }
+    } as QueryModel;
+  }
+
   function handleRowClick(params: GridRowParams<Profile>): void {
-    navigate(`/profile/${params.row.id}`)
+    navigate(`/members/${params.row.id}`)
   }
 
   return (
@@ -98,6 +122,7 @@ export const MembersPage = () => {
               rows={pageInfo.rows}
               columns={columns}
 
+              pageSizeOptions={[5, 10, 25, 100]}
               paginationMode='server'
               paginationModel={paginationModel}
               rowCount={pageInfo.totalRowCount}
@@ -107,9 +132,10 @@ export const MembersPage = () => {
               sortModel={sortModel}
               onSortModelChange={setSortModel}
 
-              pageSizeOptions={[5, 10, 25, 100]}
+              filterMode="server"
+              filterModel={filterModel}
+              onFilterModelChange={setFilterModel}
 
-              disableRowSelectionOnClick={false}
               onRowClick={handleRowClick}
             />
           </CardContent>
