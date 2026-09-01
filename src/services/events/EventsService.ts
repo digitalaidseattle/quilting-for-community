@@ -4,6 +4,7 @@ import { EventsEntityService } from "./EventsEntityService";
 import {
     Event,
     EventSession,
+    EventStatus,
 } from "./types";
 
 /** Builds the denormalized search blob used for generalized event filters. */
@@ -22,6 +23,19 @@ export function normalizeSessionParts(sessions: EventSession[]): EventSession[] 
     return sessions
         .map((session) => ({ ...session, part: renumbered.get(session.part) as number }))
         .sort((a, b) => a.part - b.part || a.start_at.localeCompare(b.start_at));
+}
+
+/** A cancelled event cannot have live sessions. Force them to match on save. */
+export function sessionsForCancelledEvent(
+    eventStatus: EventStatus,
+    sessions: EventSession[],
+): EventSession[] {
+    if (eventStatus !== 'cancelled') {
+        return sessions;
+    }
+    return sessions.map((session) => (
+        session.status === 'cancelled' ? session : { ...session, status: 'cancelled' }
+    ));
 }
 
 // Handles both events and their sessions
@@ -59,9 +73,13 @@ export class EventsService {
             ? await this.events.update(event.id, payload)
             : await this.events.insert(payload as Event);
 
+        const eventId = saved.id as string;
+
         if (event_sessions) {
-            const normalized = normalizeSessionParts(event_sessions);
-            const existing = event.id ? await this.sessions.getByEventId(saved.id as string) : [];
+            const normalized = normalizeSessionParts(
+                sessionsForCancelledEvent(fields.status, event_sessions),
+            );
+            const existing = event.id ? await this.sessions.getByEventId(eventId) : [];
             const keptIds = new Set(normalized.map((session) => session.id));
 
             await Promise.all([
@@ -70,9 +88,16 @@ export class EventsService {
                     .map((session) => this.sessions.delete(session.id as string)),
                 ...normalized.map(({ instructor: _instructor, ...session }) => this.sessions.upsert({
                     ...session,
-                    event_id: saved.id as string,
+                    event_id: eventId,
                 } as EventSession)),
             ]);
+        } else if (fields.status === 'cancelled' && event.id) {
+            const existing = await this.sessions.getByEventId(eventId);
+            await Promise.all(
+                existing
+                    .filter((session) => session.status !== 'cancelled')
+                    .map((session) => this.sessions.update(session.id as string, { status: 'cancelled' })),
+            );
         }
 
         return await this.getById(saved.id as string) as Event;
