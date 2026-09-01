@@ -2,6 +2,9 @@ import { ConstantsDao } from "./ConstantsDao";
 import {
     EVENT_CATEGORY_CONSTANT_TYPE,
     EventCategoryOption,
+    ConstantOption,
+    PRODUCT_CATEGORY_CONSTANT_TYPE,
+    PRODUCT_STATUS_CONSTANT_TYPE,
     TIMEZONE_CONSTANT_TYPE,
     TimezoneOption,
 } from "./types";
@@ -60,6 +63,26 @@ export class ConstantsService {
             return rows.map((row) => ({ value: row.value, label: row.label }));
         } catch {
             return DEFAULT_EVENT_CATEGORY_OPTIONS;
+        }
+    }
+
+    // Backs the "product-category" check constraint enforced in the products table trigger.
+    async getProductCategories(): Promise<ConstantOption[]> {
+        try {
+            const rows = await this.dao.getByType(PRODUCT_CATEGORY_CONSTANT_TYPE);
+            return rows.map((row) => ({ value: row.value, label: row.label }));
+        } catch {
+            return [];
+        }
+    }
+
+    // Backs the "product-status" check constraint enforced in the products table trigger.
+    async getProductStatuses(): Promise<ConstantOption[]> {
+        try {
+            const rows = await this.dao.getByType(PRODUCT_STATUS_CONSTANT_TYPE);
+            return rows.map((row) => ({ value: row.value, label: row.label }));
+        } catch {
+            return [];
         }
     }
 }
