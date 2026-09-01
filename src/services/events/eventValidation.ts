@@ -1,6 +1,9 @@
 import { FieldErrors, Resolver } from "react-hook-form";
 import { Event } from "./types";
 
+export const MIN_DURATION_MINUTES = 1;
+export const MAX_DURATION_MINUTES = 24 * 60;
+
 export type EventFieldErrors = Partial<Record<
     'name' | 'duration' | 'max_seats' | 'volunteer_seat_count' | 'price' | 'sessions',
     string
@@ -17,8 +20,10 @@ export function validateEvent(event: Event): EventFieldErrors {
         errors.name = 'Title is required';
     }
 
-    if (isMissingNumber(event.duration) || event.duration < 1) {
+    if (isMissingNumber(event.duration) || event.duration < MIN_DURATION_MINUTES) {
         errors.duration = 'Duration must be at least 1 minute';
+    } else if (event.duration > MAX_DURATION_MINUTES) {
+        errors.duration = 'Duration cannot exceed 24 hours (1440 minutes)';
     }
 
     if (isMissingNumber(event.max_seats) || event.max_seats < 1) {
