@@ -9,11 +9,12 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
     static empty(eventId = ''): EventSession {
         return {
             event_id: eventId,
-            description: '',
             start_at: new Date().toISOString(),
             end_at: new Date(Date.now() + DEFAULT_SESSION_DURATION_MS).toISOString(),
             max_seats: null,
             status: 'draft',
+            part: 1,
+            instructor_id: null,
         } as EventSession;
     }
 
@@ -21,7 +22,8 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
         if (!EventSessionsDao.instance) {
             EventSessionsDao.instance = new EventSessionsDao(
                 SupabaseConfiguration.getInstance().getSupabaseClient(),
-                'event_sessions'
+                'event_sessions',
+                { select: '*, instructor:profiles!instructor_id(id, name, email, first_name, last_name)' }
             );
         }
         return EventSessionsDao.instance;
@@ -32,6 +34,7 @@ export class EventSessionsDao extends SupabaseDAO<EventSession> {
             .from(this.tableName)
             .select(this.select)
             .eq('event_id', eventId)
+            .order('part')
             .order('start_at');
 
         if (error) {

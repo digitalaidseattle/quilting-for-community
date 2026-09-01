@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { HomeOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import {
     Breadcrumbs,
@@ -23,20 +23,9 @@ import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
 import { EventsService } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
-import { EventsDao } from "../../services/events/EventsDao";
 import { Event, EventSession } from "../../services/events/types";
-import { ProfilesService } from "../../services/members/ProfilesService";
 import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
-import { EventDialog } from "./EventDialog";
-
-const TEMPLATES_QUERY: QueryModel = {
-    page: 0,
-    pageSize: 100,
-    sortField: 'name',
-    sortDirection: 'asc',
-    filterModel: { items: [{ field: 'template', operator: 'equals', value: true }] },
-};
 
 // Month view can show up to a week of adjacent months on either side.
 const initialCalendarRange = (): CalendarRange => ({
@@ -48,21 +37,16 @@ export const AdminEventManagementPage = () => {
     const service = EventsService.getInstance();
     const { setLoading } = useContext(LoadingContext);
     const { refresh } = useContext(RefreshContext);
+    const navigate = useNavigate();
 
     const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
     const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'name', sort: 'asc' }]);
     const [pageInfo, setPageInfo] = useState<PageInfo<Event>>({ rows: [], totalRowCount: 0 });
-    const [templateEvents, setTemplateEvents] = useState<Event[]>([]);
     const [calendarRange, setCalendarRange] = useState<CalendarRange>(initialCalendarRange);
     const [calendarEvents, setCalendarEvents] = useState<Event[]>([]);
     const [version, setVersion] = useState(0);
     const [tab, setTab] = useState(0); // 0 = Calendar, 1 = List
     const [search, setSearch] = useState('');
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [editing, setEditing] = useState<Event>(EventsDao.empty());
-    const [initialSessionId, setInitialSessionId] = useState<string | null>(null);
-    const [initialSession, setInitialSession] = useState<EventSession | null>(null);
-    const [sessionOnly, setSessionOnly] = useState(false);
     const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
     const [timeZone, setTimeZone] = useState(loadStoredTimezone);
     const { options: categoryOptions } = useEventCategoryOptions();
@@ -86,10 +70,6 @@ export const AdminEventManagementPage = () => {
     useEffect(() => { fetchPage(); }, [paginationModel, sortModel, refresh, version, search]);
 
     useEffect(() => {
-        service.find(TEMPLATES_QUERY, { select: '*' }).then((page) => setTemplateEvents(page.rows));
-    }, [refresh, version]);
-
-    useEffect(() => {
         if (tab === 0) {
             fetchCalendarEvents();
         }
@@ -105,9 +85,7 @@ export const AdminEventManagementPage = () => {
         } as QueryModel;
 
         setLoading(true);
-        service.find(queryModel, {
-            select: '*, instructor:profiles!instructor_id(id, name, email, first_name, last_name)',
-        })
+        service.find(queryModel, { select: '*' })
             .then(setPageInfo)
             .finally(() => setLoading(false));
     }
@@ -140,40 +118,15 @@ export const AdminEventManagementPage = () => {
     }
 
     function openNew() {
-        setInitialSessionId(null);
-        setInitialSession(null);
-        setSessionOnly(false);
-        setEditing(EventsDao.empty());
-        setDialogOpen(true);
+        navigate('/admin/event-management/new');
     }
 
     function openEdit(event: Event) {
-        setInitialSessionId(null);
-        setInitialSession(null);
-        setSessionOnly(false);
-        setEditing({ ...event });
-        setDialogOpen(true);
+        navigate(`/admin/event-management/${event.id}`);
     }
 
     function openSessionFromCalendar(event: Event, session: EventSession) {
-        // Pass the session object from the calendar so the dialog doesn't seed
-        // from stale EventDialog state (the dialog stays mounted across opens).
-        setInitialSessionId(session.id as string);
-        setInitialSession(session);
-        setSessionOnly(true);
-        setEditing({ ...event });
-        setDialogOpen(true);
-    }
-
-    function openEventFromSession() {
-        setSessionOnly(false);
-    }
-
-    function closeDialog() {
-        setDialogOpen(false);
-        setSessionOnly(false);
-        setInitialSessionId(null);
-        setInitialSession(null);
+        navigate(`/admin/event-management/${event.id}?session=${session.id}`);
     }
 
     async function handleSessionTimesChange(session: EventSession, startAt: string, endAt: string) {
@@ -210,9 +163,6 @@ export const AdminEventManagementPage = () => {
         try {
             await service.delete(eventToDelete.id);
             setEventToDelete(null);
-            if (dialogOpen && editing.id === eventToDelete.id) {
-                setDialogOpen(false);
-            }
             refetch();
         } finally {
             setLoading(false);
@@ -230,16 +180,6 @@ export const AdminEventManagementPage = () => {
                 categoryOptions.find((option) => option.value === row.category)?.label
                 ?? row.category,
         },
-        {
-            field: 'instructor',
-            headerName: 'Instructor',
-            width: 160,
-            sortable: false,
-            valueGetter: (_: unknown, row: Event) =>
-                row.instructor
-                    ? ProfilesService.getInstance().profileLabel(row.instructor)
-                    : '',
-        },
         { field: 'max_seats', headerName: 'Seats', width: 80 },
         {
             field: 'template',
@@ -252,6 +192,7 @@ export const AdminEventManagementPage = () => {
             headerName: 'Actions',
             width: 230,
             sortable: false,
+            display: 'flex' as const,
             renderCell: (params: { row: Event }) => (
                 <Stack direction="row" spacing={1} onClick={(e) => e.stopPropagation()}>
                     <Button size="small" onClick={() => openEdit(params.row)}>Edit</Button>
@@ -337,25 +278,6 @@ export const AdminEventManagementPage = () => {
                     </Card>
                 )}
             </Stack>
-
-            <EventDialog
-                service={service}
-                open={dialogOpen}
-                editing={editing}
-                templateEvents={templateEvents}
-                timeZone={timeZone}
-                onTimeZoneChange={handleTimeZoneChange}
-                initialSessionId={initialSessionId}
-                initialSession={initialSession}
-                sessionOnly={sessionOnly}
-                onOpenEventDetails={openEventFromSession}
-                onClose={closeDialog}
-                onSaved={refetch}
-                onInitialSessionOpened={() => {
-                    setInitialSessionId(null);
-                    setInitialSession(null);
-                }}
-            />
 
             <ConfirmationDialog
                 open={eventToDelete != null}
