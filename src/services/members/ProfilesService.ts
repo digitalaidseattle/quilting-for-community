@@ -56,8 +56,8 @@ export class ProfilesService {
         return this.dao.getById(id);
     }
 
-    async getByUid(uid: Identifier): Promise<Profile | null> {
-        return this.dao.getByUid(uid);
+    async getByAuthId(authId: Identifier): Promise<Profile | null> {
+        return this.dao.getByAuthId(authId);
     }
 
     async batchInsert(entities: Profile[], opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
@@ -75,10 +75,11 @@ export class ProfilesService {
     }
 
     async update(entityId: Identifier, updatedFields: Partial<Profile>, opts?: DataAccessOptions<Profile>): Promise<Profile> {
-        // don't allow updates on id, uid, or roles
-        // NOTE: email update allowed on profile, but it will be synced
-        // if the user email is updated (see handle_new_user function)
-        const { id: _id, uid: _uid, roles: _roles, ...cleanedFields } = updatedFields;
+        // don't allow updates on id, auth_id, or roles
+        // NOTE: email is only actually editable for login-less profiles; for
+        // linked profiles the DB silently reverts it (see set_profile_updated_at)
+        // since it's meant to mirror auth.users.email via handle_new_user
+        const { id: _id, auth_id: _auth_id, roles: _roles, ...cleanedFields } = updatedFields;
 
         return this.dao.update(entityId, cleanedFields, opts);
     }
@@ -90,7 +91,7 @@ export class ProfilesService {
     }
 
     async upsert(entity: UpsertProfile, opts?: DataAccessOptions<Profile>): Promise<Profile> {
-        // NOTE: same note about email drift
+        // NOTE: same note about email persisting for user-linked profiles
         const { roles: _roles, ...cleanedProfile } = entity
 
         return this.dao.upsert(cleanedProfile, opts);
