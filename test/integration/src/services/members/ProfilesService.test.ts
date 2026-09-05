@@ -180,8 +180,8 @@ describe("ProfilesService", () => {
             expect(profile).toMatchObject(expectedProfile);
         });
 
-        test("profile survives auth user deletion with auth_id set to null", async () => {
-            expect.assertions(2);
+        test("profile survives auth user deletion with auth_id and status cleared", async () => {
+            expect.assertions(3);
 
             const user = await createTestUser("_DELCASCADE");
             const { data: profileBefore } = await serviceRoleClient
@@ -194,12 +194,13 @@ describe("ProfilesService", () => {
 
             const { data: profileAfter } = await serviceRoleClient
                 .from("profiles")
-                .select("id, auth_id")
+                .select("id, auth_id, status")
                 .eq("id", profileBefore!.id)
                 .single();
 
             expect(profileAfter).not.toBeNull();
             expect(profileAfter?.auth_id).toBeNull();
+            expect(profileAfter?.status).toEqual("inactive");
         });
 
         test("auth_id cannot be reassigned to a different auth user", async () => {
@@ -446,6 +447,18 @@ describe("ProfilesService", () => {
             const updated = await adminProfileService.update(profile.id, { email: newEmail });
             expect(updated.email).toEqual(newEmail);
         });
+
+        test("an admin can deactivate and reactivate a profile", async () => {
+            expect.assertions(2);
+
+            const profileId = testProfiles[testUsers[5].id];
+
+            const deactivated = await adminProfileService.updateStatus(profileId, "inactive");
+            expect(deactivated.status).toEqual("inactive");
+
+            const reactivated = await adminProfileService.updateStatus(profileId, "active");
+            expect(reactivated.status).toEqual("active");
+        });
     });
 
     describe("as a non-admin user", () => {
@@ -519,6 +532,19 @@ describe("ProfilesService", () => {
 
             expect(updated.last_name).toEqual("Escalated");
             expect(updated.roles).not.toContain("admin");
+        });
+
+        test("cannot deactivate own profile via update", async () => {
+            expect.assertions(2);
+
+            const updated = await nonAdminProfileService.update(nonAdminProfileId, {
+                last_name: "StatusCombo",
+                status: "inactive",
+            });
+
+            // the DB silently reverts a non-admin's status edit, same as roles
+            expect(updated.last_name).toEqual("StatusCombo");
+            expect(updated.status).toEqual("active");
         });
 
         test("cannot update a login-less profile", async () => {
