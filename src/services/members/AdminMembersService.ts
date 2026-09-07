@@ -14,6 +14,7 @@ export type RegisterMemberInput = {
     last_name?: string;
     phone?: string;
     roles?: string[];
+    waiver_accepted?: boolean;
 };
 
 /**
@@ -47,6 +48,20 @@ export class AdminMembersService {
         const supabaseClient = SupabaseConfiguration.getInstance().getSupabaseClient();
 
         try {
+            const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+            if (sessionError) {
+                throw new Error(sessionError.message || 'Unable to verify your session.');
+            }
+
+            const sessionRoles = Array.isArray(sessionData?.session?.user?.app_metadata?.roles)
+                ? sessionData.session.user.app_metadata.roles
+                : [];
+            const hasAdminRole = sessionRoles.some((role) => String(role).toLowerCase() === 'admin');
+
+            if (!sessionData?.session || !hasAdminRole) {
+                throw new Error('You must be signed in as an admin to register members.');
+            }
+
             const { data, error } = await supabaseClient.functions.invoke('register-member', {
                 body: input,
             });
@@ -62,14 +77,14 @@ export class AdminMembersService {
             // Return a minimal profile object; the full profile is created server-side
             const profile: Profile = {
                 id: data.user_id,
-                uid: data.user_id,
+                auth_id: data.user_id,
                 name: [input.first_name, input.last_name].filter(Boolean).join(' ').trim() || input.email,
                 first_name: input.first_name,
                 last_name: input.last_name,
                 email: data.email,
                 phone: input.phone || '',
                 roles: input.roles || [],
-                waiver_accepted: false,
+                waiver_accepted: input.waiver_accepted ?? false,
             };
 
             return profile;
@@ -105,6 +120,40 @@ export class AdminMembersService {
         } catch (error) {
             console.error('Error checking if email exists:', error);
             throw error;
+        }
+    }
+
+    async searchParticipants(q: string): Promise<Profile[]> {
+        try {
+            const supabaseClient = SupabaseConfiguration.getInstance().getSupabaseClient();
+
+            const like = `%${q.replace(/%/g, '')}%`;
+            const orQuery = `name.ilike.${like},email.ilike.${like},phone.ilike.${like}`;
+
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .or(orQuery)
+                .limit(20);
+
+            if (error) {
+                throw error;
+            }
+
+            return (data ?? []).map((row: any) => ({
+                id: row.id,
+                auth_id: row.auth_id ?? null,
+                name: row.name,
+                first_name: row.first_name,
+                last_name: row.last_name,
+                email: row.email,
+                phone: row.phone,
+                roles: row.roles || [],
+                waiver_accepted: !!row.waiver_accepted,
+            }));
+        } catch (err) {
+            console.error('Error searching participants:', err);
+            throw err;
         }
     }
 }

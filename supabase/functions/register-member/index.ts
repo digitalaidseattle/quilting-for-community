@@ -19,17 +19,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, first_name, last_name, phone, roles } = await req.json() as RegisterMemberRequest;
-
-    // Validate email
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new Response(
-        JSON.stringify({ error: 'Invalid email address' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'You must be signed in as an admin to register members.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Create Supabase client with service role key
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -42,6 +39,36 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const jwt = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'You must be signed in as an admin to register members.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userRoles = Array.isArray(user.app_metadata?.roles)
+      ? user.app_metadata.roles.map((role) => String(role).toLowerCase())
+      : [];
+
+    if (!userRoles.includes('admin')) {
+      return new Response(
+        JSON.stringify({ error: 'You must be signed in as an admin to register members.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { email, first_name, last_name, phone, roles } = await req.json() as RegisterMemberRequest;
+
+    // Validate email
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid email address' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Check if email already exists
     const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();

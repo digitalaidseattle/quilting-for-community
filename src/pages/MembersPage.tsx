@@ -3,11 +3,12 @@
  * 
  * @copyright 2026 Digital Aid Seattle
 */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { HomeOutlined } from "@ant-design/icons";
-import { Breadcrumbs, Card, CardContent, IconButton, Stack, Typography } from '@mui/material';
+import { PlusOutlined } from "@ant-design/icons";
+import { Breadcrumbs, Card, CardContent, IconButton, Stack, Typography, Button } from '@mui/material';
 import {
   DataGrid,
   GridFilterModel,
@@ -17,11 +18,14 @@ import {
 } from '@mui/x-data-grid';
 
 
-import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useNotifications } from "@digitalaidseattle/core";
+import { FilterItem, LoadingContext, PageInfo, QueryModel, useNotifications } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/Data";
 import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
 import { ProfilesService } from "../services/members/ProfilesService";
+import { useAuthService } from '@digitalaidseattle/core';
+import { Q4CAuthService } from '../services/Q4CAuthService';
+import { MemberRegistrationDialog } from "./admin/MemberRegistrationDialog";
 
 
 // ==============================|| SAMPLE PAGE ||============================== //
@@ -29,18 +33,20 @@ import { ProfilesService } from "../services/members/ProfilesService";
 export const MembersPage = () => {
   const profilesService = ProfilesService.getInstance();
   const notifications = useNotifications();
+  const authService = useAuthService() as Q4CAuthService;
 
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'email', sort: 'asc' }]);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
 
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const apiRef = useGridApiRef();
   const { setLoading } = useContext(LoadingContext);
-  const { refresh } = useContext(RefreshContext);
   const navigate = useNavigate();
 
-  const columns = [
+  const userColumns = [
     {
       field: 'name',
       headerName: Labels.NAME,
@@ -53,38 +59,73 @@ export const MembersPage = () => {
     }
   ];
 
-  // API data fetch, uncomment to replace dummy data with real data
-  const fetchData = useCallback(() => {
-    profilesService
-      .find(createQueryModel())
-      .then(data => setPageInfo(data))
-      .catch(err => {
-        notifications.error('Error fetching profiles.');
-        console.error('Error fetching profiles:', err);
-      })
-      .finally(() => setLoading(false));
+  const adminColumns = [
+    ...userColumns,
+    {
+      field: 'phone',
+      headerName: 'Phone',
+      width: 150,
+    },
+    {
+      field: 'roles',
+      headerName: 'Roles',
+      width: 200,
+      renderCell: (params: any) => (params.value as string[]).join(', '),
+    },
+  ];
 
-  }, [paginationModel, profilesService, setLoading, sortModel]);
+  async function doFetch(options?: { paginationModel?: any; sortModel?: any; filterModel?: any }) {
+    setLoading(true);
+    try {
+      const pModel = options?.paginationModel ?? paginationModel;
+      const sModel = options?.sortModel ?? sortModel;
+      const fModel = options?.filterModel ?? filterModel;
+
+      const query = createQueryModel(pModel, sModel, fModel);
+      const data = await profilesService.find(query);
+      setPageInfo(data);
+    } catch (err) {
+      notifications.error('Error fetching profiles.');
+      console.error('Error fetching profiles:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData, refresh])
+    // fetch only when page mounts
+    doFetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    authService.getUser().then((user) => {
+      if (user && authService.isAuthorized(user, ['admin'])) {
+        setIsAdmin(true);
+      } else {
+        setIsAdmin(false);
+      }
+    });
+  }, [authService]);
 
 
-  function createQueryModel(): QueryModel {
+  function createQueryModel(pModel?: any, sModel?: any, fModel?: any): QueryModel {
     const filterItems: FilterItem[] = [];
-    if (filterModel && filterModel.items.length > 0) {
-      const filterItem = filterModel.items[0];
+    const fm = fModel ?? filterModel;
+    if (fm && fm.items.length > 0) {
+      const filterItem = fm.items[0];
       filterItems.push({
         field: filterItem.field,
         operator: filterItem.operator,
         value: filterItem.value
       })
     }
-    const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
-    const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
+    const sm = sModel ?? sortModel;
+    const sortField = sm && sm.length > 0 ? sm![0].field : '';
+    const sortDirection = sm && sm.length > 0 ? sm![0].sort : '';
+    const pm = pModel ?? paginationModel;
     return {
-      ...paginationModel,
+      ...pm,
       sortField: sortField,
       sortDirection: sortDirection,
       filterModel: {
@@ -95,6 +136,11 @@ export const MembersPage = () => {
 
   function handleRowClick(params: GridRowParams<Profile>): void {
     navigate(`/members/${params.row.id}`)
+  }
+
+  function handleRegistrationSuccess() {
+    notifications.success('Member registered successfully!');
+    doFetch();
   }
 
   return (
@@ -117,29 +163,50 @@ export const MembersPage = () => {
         </Card>
         <Card>
           <CardContent>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="h5">Members</Typography>
+              {isAdmin && (
+                <Button
+                  variant="contained"
+                  startIcon={<PlusOutlined />}
+                  onClick={() => setDialogOpen(true)}
+                >
+                  Register Member
+                </Button>
+              )}
+            </Stack>
+
             <DataGrid
               apiRef={apiRef}
               rows={pageInfo.rows}
-              columns={columns}
+              columns={isAdmin ? adminColumns : userColumns}
 
               pageSizeOptions={[5, 10, 25, 100]}
               paginationMode='server'
               paginationModel={paginationModel}
               rowCount={pageInfo.totalRowCount}
-              onPaginationModelChange={setPaginationModel}
+              onPaginationModelChange={(model) => { setPaginationModel(model); doFetch({ paginationModel: model }); }}
 
               sortingMode='server'
               sortModel={sortModel}
-              onSortModelChange={setSortModel}
+              onSortModelChange={(model) => { setSortModel(model); doFetch({ sortModel: model }); }}
 
               filterMode="server"
               filterModel={filterModel}
-              onFilterModelChange={setFilterModel}
+              onFilterModelChange={(model) => { setFilterModel(model); doFetch({ filterModel: model }); }}
 
               onRowClick={handleRowClick}
+              sx={{ cursor: 'pointer' }}
             />
           </CardContent>
         </Card>
       </Stack>
+      {isAdmin && (
+        <MemberRegistrationDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          onSuccess={handleRegistrationSuccess}
+        />
+      )}
     </>)
 };
