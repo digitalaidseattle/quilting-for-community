@@ -166,4 +166,44 @@ describe("event cancellation cascade", () => {
         expect(await getEventStatus(event.id)).toBe("published");
         expect(await getSessionStatuses(event.id)).toEqual(["cancelled", "draft"]);
     });
+
+    test("rejects uncancelling a session when its event is cancelled", async () => {
+        const event = await createEvent("published");
+        const session = await createSession(event.id, "published", instructorId);
+
+        await serviceRoleClient
+            .from("events")
+            .update({ status: "cancelled" })
+            .eq("id", event.id);
+
+        expect(await getSessionStatuses(event.id)).toEqual(["cancelled"]);
+
+        const { error: updateError } = await serviceRoleClient
+            .from("event_sessions")
+            .update({ status: "draft" })
+            .eq("id", session.id);
+
+        expect(updateError).not.toBeNull();
+        expect(updateError?.message).toMatch(/cancelled/i);
+        expect(await getSessionStatuses(event.id)).toEqual(["cancelled"]);
+    });
+
+    test("rejects inserting a live session under a cancelled event", async () => {
+        const event = await createEvent("cancelled");
+
+        const { error } = await serviceRoleClient
+            .from("event_sessions")
+            .insert({
+                event_id: event.id,
+                start_at: "2026-10-01T17:00:00.000Z",
+                end_at: "2026-10-01T19:00:00.000Z",
+                status: "draft",
+                part: 1,
+                instructor_id: null,
+            });
+
+        expect(error).not.toBeNull();
+        expect(error?.message).toMatch(/cancelled/i);
+        expect(await getSessionStatuses(event.id)).toEqual([]);
+    });
 });

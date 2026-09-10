@@ -111,7 +111,7 @@ Changes are promoted along the branch flow `feature -> dev -> qa -> main`.  Each
 | QA | `dev`, `qa` | Vercel preview deployments. The `qa` branch has a stable URL | QA Supabase project |
 | Production | `main` | Vercel production deployment | production Supabase project |
 
-Pull request previews on Vercel point at the QA database j
+Pull request previews on Vercel point at the QA database, so a PR that adds a migration will not see its own schema change until it is merged to `dev`.  Test schema changes locally with `supabase start` first.
 
 ### Local test logins
 `supabase db reset` reloads `supabase/test_data/users.sql`, which creates two throwaway accounts on the local stack so you can sign in with email/password instead of going through Google:

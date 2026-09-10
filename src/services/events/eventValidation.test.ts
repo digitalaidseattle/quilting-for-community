@@ -73,4 +73,22 @@ describe("validateEvent", () => {
             event_sessions: [session({ status: 'draft' })],
         }))).toEqual({});
     });
+
+    test("rejects an event with NaN duration", () => {
+        expect(validateEvent(baseEvent({ duration: NaN }))).toEqual({
+            duration: 'Duration must be a valid number',
+        });
+    });
+
+    test("rejects an event with NaN capacity, volunteer seats, or price", () => {
+        expect(validateEvent(baseEvent({
+            max_seats: NaN,
+            volunteer_seat_count: NaN,
+            price: NaN,
+        }))).toEqual({
+            max_seats: 'Capacity must be a valid number',
+            volunteer_seat_count: 'Volunteer seats must be a valid number',
+            price: 'Price must be a valid number',
+        });
+    });
 });

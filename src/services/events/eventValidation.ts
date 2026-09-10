@@ -7,7 +7,7 @@ export type EventFieldErrors = Partial<Record<
 >>;
 
 function isMissingNumber(value: number | null | undefined): boolean {
-    return value == null || Number.isNaN(value);
+    return value == null;
 }
 
 export function validateEvent(event: Event): EventFieldErrors {
@@ -19,25 +19,35 @@ export function validateEvent(event: Event): EventFieldErrors {
 
     // Other event fields have defaults and are optional on create. Only reject
     // values that would fail a database constraint if they were submitted.
-    if (!isMissingNumber(event.duration) && event.duration < 1) {
+    // NaN usually comes from an emptied number input.
+    if (Number.isNaN(event.duration)) {
+        errors.duration = 'Duration must be a valid number';
+    } else if (!isMissingNumber(event.duration) && event.duration < 1) {
         errors.duration = 'Duration must be at least 1 minute';
     }
 
-    if (!isMissingNumber(event.max_seats) && event.max_seats < 1) {
+    if (Number.isNaN(event.max_seats)) {
+        errors.max_seats = 'Capacity must be a valid number';
+    } else if (!isMissingNumber(event.max_seats) && event.max_seats < 1) {
         errors.max_seats = 'Capacity must be at least 1';
     }
 
-    if (!isMissingNumber(event.volunteer_seat_count) && event.volunteer_seat_count < 0) {
+    if (Number.isNaN(event.volunteer_seat_count)) {
+        errors.volunteer_seat_count = 'Volunteer seats must be a valid number';
+    } else if (!isMissingNumber(event.volunteer_seat_count) && event.volunteer_seat_count < 0) {
         errors.volunteer_seat_count = 'Volunteer seats cannot be negative';
     } else if (
         !isMissingNumber(event.volunteer_seat_count)
         && !isMissingNumber(event.max_seats)
+        && !Number.isNaN(event.max_seats)
         && event.volunteer_seat_count > event.max_seats
     ) {
         errors.volunteer_seat_count = 'Volunteer seats cannot exceed max seats';
     }
 
-    if (!isMissingNumber(event.price) && event.price < 0) {
+    if (Number.isNaN(event.price)) {
+        errors.price = 'Price must be a valid number';
+    } else if (!isMissingNumber(event.price) && event.price < 0) {
         errors.price = 'Price cannot be negative';
     }
 
