@@ -34,3 +34,16 @@ export type EventSession = Entity & {
     instructor_id: string | null;
     instructor?: EventInstructor | null;
 };
+
+export type RegistrationType = 'participant' | 'volunteer';
+export type RegistrationStatus = 'confirmed' | 'cancelled';
+
+/** One person's registration for one session (see migration 20260901120000_event_registrations.sql). */
+export type EventRegistration = Entity & {
+    session_id: string;
+    profile_id: string;
+    registration_type: RegistrationType;
+    status: RegistrationStatus;
+    manage_token: string;
+    waiver_accepted_at: string | null;
+};
