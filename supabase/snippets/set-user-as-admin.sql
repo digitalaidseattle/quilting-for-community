@@ -37,7 +37,7 @@ begin
   select roles
   into synchronized_roles
   from public.profiles
-  where id = target_user_id;
+  where auth_id = target_user_id;
 
   if not found or synchronized_roles is distinct from array['admin']::text[] then
     raise exception 'Profile role synchronization failed for Auth user %', target_user_id;
