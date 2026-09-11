@@ -47,7 +47,7 @@ export default function ProfileDialog({
         onChange(null);
     }
 
-    const onSubmit: SubmitHandler<Profile> = (data) => {
+    const onSubmit: SubmitHandler<Profile> = (data: Profile) => {
         onChange(data);
     };
 
