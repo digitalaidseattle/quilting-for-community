@@ -135,12 +135,14 @@ export const AdminEventPage = () => {
     const isNew = !id;
 
     const [notFound, setNotFound] = useState(false);
+    const [loadedId, setLoadedId] = useState<string | undefined>();
     const [timeZone, setTimeZone] = useState(loadStoredTimezone);
     const [templateEvents, setTemplateEvents] = useState<Event[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
     const [instructorOptions, setInstructorOptions] = useState<Profile[]>([]);
     const [confirmDelete, setConfirmDelete] = useState<{ type: 'event' } | { type: 'session', session: EventSession } | null>(null);
+    const loadingEvent = !isNew && !notFound && loadedId !== id;
 
     const {
         control,
@@ -209,19 +211,50 @@ export const AdminEventPage = () => {
 
     useEffect(() => {
         if (isNew) {
+            setNotFound(false);
+            setLoadedId(undefined);
             reset(EventsDao.empty());
+            setSessionDialogOpen(false);
+            setConfirmDelete(null);
             return;
         }
+
+        let cancelled = false;
+        setNotFound(false);
+        setLoadedId(undefined);
+        setLoading(true);
+        reset(EventsDao.empty());
+        setSessionDialogOpen(false);
+        setConfirmDelete(null);
+
         service.getById(id).then((full) => {
+            if (cancelled) {
+                return;
+            }
             if (full) {
+                setNotFound(false);
                 reset(full);
+                setLoadedId(id);
             } else {
                 setNotFound(true);
             }
+        }).catch(() => {
+            if (!cancelled) {
+                setNotFound(true);
+            }
+        }).finally(() => {
+            if (!cancelled) {
+                setLoading(false);
+            }
         });
-    }, [id, isNew, reset, service]);
 
-    // Calendar clicks land here with ?session=<id>; open that session's dialog once.
+        return () => {
+            cancelled = true;
+            setLoading(false);
+        };
+    }, [id, isNew, reset, service, setLoading]);
+
+    // Calendar clicks land here with ?session=<id>
     const initialSessionId = searchParams.get('session');
     useEffect(() => {
         if (!initialSessionId) {
@@ -451,6 +484,10 @@ export const AdminEventPage = () => {
                 </Box>
             </Stack>
         );
+    }
+
+    if (loadingEvent) {
+        return null;
     }
 
     return (
