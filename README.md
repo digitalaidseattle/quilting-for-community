@@ -155,8 +155,9 @@ npm run test:integration  # or just test
 ```
 
 Required environment variables:
-* `SUPABASE_SECRET_KEY`
+* `SUPABASE_SECRET_KEY`=<SERVICE_ROLE_KEY>
+* `VITE_SUPABASE_ANON_KEY`=<ANON_KEY>
 
-Run `npx supabase status` to view authentication keys. `.env.test.local` file can be used.
+Run `npx supabase status -o env` to view the `SERVICE_ROLE_KEY` and `ANON_KEY` authentication keys. `.env.test.local` file can be used.
 
 In order to preserve the local database in case of local manual testing, integration tests should clean up any test data. If this isn't a concern, feel free to run `npx supabase db reset` to reset the database before running the tests.
