@@ -62,6 +62,24 @@ export class EventsService {
         return this.events.getById(id);
     }
 
+    private async syncSessions(eventId: string, eventStatus: EventStatus, eventSessions: EventSession[]): Promise<void> {
+        const normalized = normalizeSessionParts(
+            sessionsForCancelledEvent(eventStatus, eventSessions),
+        );
+        const existing = await this.sessions.getByEventId(eventId);
+        const keptIds = new Set(normalized.map((session) => session.id));
+
+        await Promise.all([
+            ...existing
+                .filter((session) => !keptIds.has(session.id))
+                .map((session) => this.sessions.delete(session.id as string)),
+            ...normalized.map(({ instructor: _instructor, ...session }) => this.sessions.upsert({
+                ...session,
+                event_id: eventId,
+            } as EventSession)),
+        ]);
+    }
+
     // Inserts or updates the event and its sessions
     async save(event: Event): Promise<Event> {
         const { event_sessions, ...fields } = event;
@@ -76,21 +94,7 @@ export class EventsService {
         const eventId = saved.id as string;
 
         if (event_sessions) {
-            const normalized = normalizeSessionParts(
-                sessionsForCancelledEvent(fields.status, event_sessions),
-            );
-            const existing = event.id ? await this.sessions.getByEventId(eventId) : [];
-            const keptIds = new Set(normalized.map((session) => session.id));
-
-            await Promise.all([
-                ...existing
-                    .filter((session) => !keptIds.has(session.id))
-                    .map((session) => this.sessions.delete(session.id as string)),
-                ...normalized.map(({ instructor: _instructor, ...session }) => this.sessions.upsert({
-                    ...session,
-                    event_id: eventId,
-                } as EventSession)),
-            ]);
+            await this.syncSessions(eventId, fields.status, event_sessions);
         } else if (fields.status === 'cancelled' && event.id) {
             const existing = await this.sessions.getByEventId(eventId);
             await Promise.all(
@@ -101,6 +105,24 @@ export class EventsService {
         }
 
         return await this.getById(saved.id as string) as Event;
+    }
+
+    async saveSession(event: Event, session: EventSession): Promise<Event> {
+        const eventSessions = normalizeSessionParts([
+            ...(event.event_sessions ?? []).filter((existing) => existing.id !== session.id),
+            session,
+        ]);
+
+        if (!event.id) {
+            return this.save({
+                ...event,
+                event_sessions: eventSessions,
+            });
+        }
+
+        const savedEvent = await this.getById(event.id as string);
+        await this.syncSessions(event.id as string, savedEvent?.status ?? event.status, eventSessions);
+        return await this.getById(event.id as string) as Event;
     }
 
     async delete(id: Identifier): Promise<void> {

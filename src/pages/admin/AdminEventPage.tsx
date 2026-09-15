@@ -152,6 +152,7 @@ export const AdminEventPage = () => {
         watch,
         clearErrors,
         handleSubmit,
+        trigger,
         formState: { errors },
     } = useForm<Event>({
         defaultValues: EventsDao.empty(),
@@ -359,16 +360,34 @@ export const AdminEventPage = () => {
         };
     }
 
-    function onSaveSession(values: SessionFormValues) {
+    async function onSaveSession(values: SessionFormValues) {
         const normalized = buildNormalizedSession(values);
         if (!normalized) return;
 
-        const others = sessions.filter((session) => session.id !== normalized.id);
-        setValue('event_sessions', normalizeSessionParts([...others, normalized]), {
-            shouldValidate: true,
-        });
-        clearErrors('event_sessions');
-        setSessionDialogOpen(false);
+        const currentEvent = getValues();
+        if (!currentEvent.id && !(await trigger())) {
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const saved = await service.saveSession(currentEvent, normalized);
+            if (currentEvent.id) {
+                setValue('event_sessions', saved.event_sessions ?? [], {
+                    shouldValidate: true,
+                });
+            } else {
+                reset(saved);
+            }
+            setLoadedId(saved.id as string | undefined);
+            clearErrors('event_sessions');
+            setSessionDialogOpen(false);
+            if (isNew && saved.id) {
+                navigate(`/admin/event-management/${saved.id}`, { replace: true });
+            }
+        } finally {
+            setLoading(false);
+        }
     }
 
     async function handleConfirmDelete() {
