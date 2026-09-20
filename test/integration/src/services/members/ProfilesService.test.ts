@@ -203,19 +203,18 @@ describe("ProfilesService", () => {
                 expect(profile.last_name).toEqual("FoobarService");
             }));
 
-        test("profile survives auth user deletion with auth_id and status cleared", () =>
+        test("profile survives auth user deletion with auth_id cleared", () =>
             withTestUser(async (user, profileId) => {
                 await serviceRoleClient.auth.admin.deleteUser(user.id);
 
                 const { data: profileAfter } = await serviceRoleClient
                     .from("profiles")
-                    .select("id, auth_id, status")
+                    .select("id, auth_id")
                     .eq("id", profileId)
                     .single();
 
                 expect(profileAfter).not.toBeNull();
                 expect(profileAfter?.auth_id).toBeNull();
-                expect(profileAfter?.status).toEqual("inactive");
             }));
 
         test("auth_id cannot be reassigned to a different auth user", async () => {

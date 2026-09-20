@@ -1,6 +1,4 @@
--- Profile lifecycle flag. Admin-managed; flipped to 'inactive' automatically
--- when a profile loses its auth link (FK `on delete set null` fires an UPDATE
--- on profiles when the auth user is deleted).
+-- Profile lifecycle flag. Admin-managed.
 
 begin;
 
@@ -13,7 +11,7 @@ alter table public.profiles
 create index profiles_status_idx on public.profiles(status);
 
 comment on column public.profiles.status is
-  'Admin-managed lifecycle flag; set to inactive automatically when the profile loses its auth link.';
+  'Admin-managed lifecycle flag; only an admin can change it.';
 
 -- status is admin-managed, but column grants on profiles are table-wide and
 -- profiles_update_own lets a member update their own row, so the guard against
@@ -38,12 +36,9 @@ begin
     new.email := old.email;
   end if;
 
-  -- losing the auth link (FK `on delete set null` when the auth user is
-  -- deleted) deactivates the profile; otherwise status is admin-only, so
-  -- silently revert a member's self-edit the same way email is reverted above.
-  if old.auth_id is not null and new.auth_id is null then
-    new.status := 'inactive';
-  elsif new.status is distinct from old.status
+  -- status is admin-only, so silently revert a member's self-edit the same way
+  -- email is reverted above.
+  if new.status is distinct from old.status
     and auth.uid() is not null
     and not public.is_admin() then
     new.status := old.status;

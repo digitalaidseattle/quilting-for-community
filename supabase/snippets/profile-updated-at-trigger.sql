@@ -14,9 +14,7 @@ begin
     new.email := old.email;
   end if;
 
-  if old.auth_id is not null and new.auth_id is null then
-    new.status := 'inactive';
-  elsif new.status is distinct from old.status
+  if new.status is distinct from old.status
     and auth.uid() is not null
     and not public.is_admin() then
     new.status := old.status;
