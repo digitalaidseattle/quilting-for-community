@@ -37,6 +37,7 @@ function baseEvent(overrides: Partial<Event> = {}): Event {
         price_max: 50,
         template: false,
         status: 'draft',
+        photo_path: '',
         search_key: '',
         event_sessions: [],
         ...overrides,
@@ -176,5 +177,18 @@ describe("EventsService.save", () => {
         expect(draft.part).toBe(1);
         expect(draft.instructor_id).toBeNull();
         expect(draft.status).toBe('draft');
+    });
+
+    test("does not share source photo storage when cloning an event", async () => {
+        vi.mocked(mockEvents.getById).mockResolvedValueOnce(baseEvent({
+            photo_path: 'events/event-1/photo.jpg',
+        }));
+        vi.mocked(mockEvents.insert).mockResolvedValue(baseEvent({ id: 'event-copy' }));
+
+        await service.cloneEvent('event-1');
+
+        expect(mockEvents.insert).toHaveBeenCalledWith(expect.objectContaining({
+            photo_path: '',
+        }));
     });
 });

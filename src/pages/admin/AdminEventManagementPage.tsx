@@ -17,7 +17,7 @@ import {
 import { DataGrid, GridSortModel } from "@mui/x-data-grid";
 import dayjs from "dayjs";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
-import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext } from "@digitalaidseattle/core";
+import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useStorageService } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
@@ -27,6 +27,11 @@ import { Event, EventSession } from "../../services/events/types";
 import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
 
+/** True when the storage object lives under this event's folder. */
+function isOwnedEventPhotoPath(path: string, eventId: string): boolean {
+    return path.startsWith(`events/${eventId}/`) || /^events\/[^/]+$/.test(path);
+}
+
 // Month view can show up to a week of adjacent months on either side.
 const initialCalendarRange = (): CalendarRange => ({
     start: dayjs().startOf('month').subtract(7, 'day').toDate(),
@@ -35,6 +40,7 @@ const initialCalendarRange = (): CalendarRange => ({
 
 export const AdminEventManagementPage = () => {
     const service = EventsService.getInstance();
+    const storageService = useStorageService();
     const { setLoading } = useContext(LoadingContext);
     const { refresh } = useContext(RefreshContext);
     const navigate = useNavigate();
@@ -161,7 +167,12 @@ export const AdminEventManagementPage = () => {
         if (!eventToDelete?.id) return;
         setLoading(true);
         try {
-            await service.delete(eventToDelete.id);
+            const eventId = eventToDelete.id as string;
+            const photoPath = eventToDelete.photo_path;
+            await service.delete(eventId);
+            if (storageService && photoPath && isOwnedEventPhotoPath(photoPath, eventId)) {
+                await storageService.removeFile(photoPath).catch(() => undefined);
+            }
             setEventToDelete(null);
             refetch();
         } finally {
