@@ -2,7 +2,7 @@
 -- Prefer the admin-only RPC when running as an authenticated admin:
 --
 --   select public.set_user_roles(
---     'd3201321-5fe7-46ee-b297-2f49c42e9132',
+--     '<existing-auth-user-uuid>',
 --     array['admin']::text[]
 --   );
 --

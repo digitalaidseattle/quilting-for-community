@@ -70,7 +70,7 @@ export class ProfilesService {
         return this.dao.getById(id);
     }
 
-    async getByUid(uid: Identifier): Promise<Profile | null> {
+    async getByAuthId(uid: Identifier): Promise<Profile | null> {
         const matches = await this.dao.findBy('auth_id', uid);
         if (matches.length === 0) {
             return null;
