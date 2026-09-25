@@ -64,7 +64,7 @@ describe("ProfilesService unit tests", () => {
 
     test("getByUid() - empty", async () => {
         const findBySpy = vitest.spyOn(mockDao, 'findBy').mockResolvedValue([]);
-        service.getByAuthId('test_uid')
+        return service.getByAuthId('test_uid')
             .then(result => {
                 expect(findBySpy).toHaveBeenCalledWith('auth_id', 'test_uid');
                 expect(result).toBe(null);
@@ -74,7 +74,7 @@ describe("ProfilesService unit tests", () => {
     test("getByUid() - handling", async () => {
         const profile = {} as Profile;
         const findBySpy = vitest.spyOn(mockDao, 'findBy').mockResolvedValue([profile]);
-        service.getByAuthId('test_uid')
+        return service.getByAuthId('test_uid')
             .then(result => {
                 expect(findBySpy).toHaveBeenCalledWith('auth_id', 'test_uid');
                 expect(result).toBe(profile);
@@ -85,7 +85,7 @@ describe("ProfilesService unit tests", () => {
         const profile1 = { id: 'id_1' } as Profile;
         const profile2 = { id: 'id_2' } as Profile;
         const findBySpy = vitest.spyOn(mockDao, 'findBy').mockResolvedValue([profile1, profile2]);
-        service.getByAuthId('test_uid')
+        return service.getByAuthId('test_uid')
             .catch(err => {
                 expect(findBySpy).toHaveBeenCalledWith('auth_id', 'test_uid');
                 expect(err.message).toBe('More than one profile found with auth_id= test_uid')
@@ -108,7 +108,7 @@ describe("ProfilesService unit tests", () => {
             }
         )
     });
-      
+
     test("getInstructorCandidates queries overlapping volunteer/instructor/admin roles and sorts by label", async () => {
         const admin = {
             id: "admin",
