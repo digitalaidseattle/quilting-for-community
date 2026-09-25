@@ -34,6 +34,12 @@ const initialCalendarRange = (): CalendarRange => ({
     end: dayjs().endOf('month').add(7, 'day').toDate(),
 });
 
+function searchFilterItems(search: string): FilterItem[] {
+    const term = search.trim();
+    if (!term) return [];
+    return [{ field: 'search_key', operator: 'contains', value: escapeIlikePattern(term) }];
+}
+
 export const AdminEventManagementPage = () => {
     const service = EventsService.getInstance();
     const { setLoading } = useContext(LoadingContext);
@@ -57,41 +63,30 @@ export const AdminEventManagementPage = () => {
         storeTimezone(next);
     }
 
-    function searchFilterItems(): FilterItem[] {
-        const term = search.trim();
-        if (!term) return [];
-        return [{ field: 'search_key', operator: 'contains', value: escapeIlikePattern(term) }];
-    }
-
     function handleSearchChange(value: string) {
         setSearch(value);
         setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
     }
 
-    useEffect(() => { fetchPage(); }, [paginationModel, sortModel, refresh, version, search]);
-
     useEffect(() => {
-        if (tab === 0) {
-            fetchCalendarEvents();
-        }
-    }, [tab, calendarRange, refresh, version, search]);
-
-    function fetchPage() {
         const queryModel = {
             page: paginationModel.page,
             pageSize: paginationModel.pageSize,
             sortField: sortModel.length === 0 ? 'name' : sortModel[0].field,
             sortDirection: sortModel.length === 0 ? 'asc' : sortModel[0].sort,
-            filterModel: { items: searchFilterItems() },
+            filterModel: { items: searchFilterItems(search) },
         } as QueryModel;
 
         setLoading(true);
         service.find(queryModel, { select: '*' })
             .then(setPageInfo)
             .finally(() => setLoading(false));
-    }
+    }, [paginationModel, sortModel, refresh, version, search, service, setLoading]);
 
-    function fetchCalendarEvents() {
+    useEffect(() => {
+        if (tab !== 0) {
+            return;
+        }
         const queryModel = {
             page: 0,
             pageSize: 200,
@@ -101,7 +96,7 @@ export const AdminEventManagementPage = () => {
                 items: [
                     { field: 'event_sessions.start_at', operator: '>', value: calendarRange.start.toISOString() },
                     { field: 'event_sessions.start_at', operator: '<', value: calendarRange.end.toISOString() },
-                    ...searchFilterItems(),
+                    ...searchFilterItems(search),
                 ],
             },
         } as QueryModel;
@@ -112,7 +107,7 @@ export const AdminEventManagementPage = () => {
         service.find(queryModel, { select: '*, event_sessions!inner(*)' })
             .then((page) => setCalendarEvents(page.rows))
             .finally(() => setLoading(false));
-    }
+    }, [tab, calendarRange, refresh, version, search, service, setLoading]);
 
     function refetch() {
         setVersion((v) => v + 1);
