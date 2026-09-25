@@ -6,7 +6,7 @@ import {
 } from "@digitalaidseattle/mui";
 import { AuthGate } from "@digitalaidseattle/core";
 
-import SamplePage from './SamplePage';
+import DashboardPage from './DashboardPage';
 import LoginPage from './LoginPage';
 import { MembersPage } from "./MembersPage";
 import { TransactionsPage } from "./TransactionsPage";
@@ -22,7 +22,7 @@ const routes = [
     children: [
       {
         path: "",
-        element: <SamplePage />
+        element: <DashboardPage />
       },
       {
         path: "/members",
