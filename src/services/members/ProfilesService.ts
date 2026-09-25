@@ -94,7 +94,7 @@ export class ProfilesService {
         // when a user is created.
         const updated = {
             ...entity,
-            name: (entity.first_name || entity.last_name) ? `${entity.first_name ?? ''} ${entity.last_name}`.toLowerCase() : ''
+            name: (entity.first_name || entity.last_name) ? `${entity.first_name ?? ''} ${entity.last_name}` : ''
         }
         delete updated.id;
         delete updated.auth_id;
@@ -112,7 +112,7 @@ export class ProfilesService {
             ...cleanedFields
         } = {
             ...updatedFields,
-            name: (updatedFields.first_name || updatedFields.last_name) ? `${updatedFields.first_name ?? ''} ${updatedFields.last_name}`.toLowerCase() : undefined
+            name: (updatedFields.first_name || updatedFields.last_name) ? `${updatedFields.first_name ?? ''} ${updatedFields.last_name}` : undefined
         };
 
         return this.dao.update(entityId, cleanedFields, opts);
@@ -143,5 +143,8 @@ export class ProfilesService {
         return this.dao.findBy(field, value);
     }
 
+    async searchBy(field: string, value: any): Promise<Profile[]> {
+        return this.dao.searchBy(field, value);
+    }
 }
 

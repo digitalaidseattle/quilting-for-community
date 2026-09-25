@@ -56,7 +56,7 @@ export default function ProfileDialog({
     async function isNameAvailable(value: string): Promise<boolean> {
         await new Promise(resolve => setTimeout(resolve, 300));
         const trimmed = value.trim();
-        const response = await profilesService.findBy('name', trimmed.toLowerCase())
+        const response = await profilesService.searchBy('name', trimmed)
         return response.length === 0;
     }
 
