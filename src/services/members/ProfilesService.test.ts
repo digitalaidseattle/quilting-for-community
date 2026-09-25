@@ -66,7 +66,7 @@ describe("ProfilesService unit tests", () => {
         const findBySpy = vitest.spyOn(mockDao, 'findBy').mockResolvedValue([]);
         service.getByUid('test_uid')
             .then(result => {
-                expect(findBySpy).toHaveBeenCalledWith('uid', 'test_uid');
+                expect(findBySpy).toHaveBeenCalledWith('auth_id', 'test_uid');
                 expect(result).toBe(null);
             })
     });
@@ -76,7 +76,7 @@ describe("ProfilesService unit tests", () => {
         const findBySpy = vitest.spyOn(mockDao, 'findBy').mockResolvedValue([profile]);
         service.getByUid('test_uid')
             .then(result => {
-                expect(findBySpy).toHaveBeenCalledWith('uid', 'test_uid');
+                expect(findBySpy).toHaveBeenCalledWith('auth_id', 'test_uid');
                 expect(result).toBe(profile);
             })
     });
@@ -88,7 +88,7 @@ describe("ProfilesService unit tests", () => {
         service.getByUid('test_uid')
             .catch(err => {
                 expect(findBySpy).toHaveBeenCalledWith('auth_id', 'test_uid');
-                expect(err.message).toBe('More than one profile found with uid= test_uid')
+                expect(err.message).toBe('More than one profile found with auth_id= test_uid')
             })
     });
 
@@ -96,8 +96,8 @@ describe("ProfilesService unit tests", () => {
         const result = service.empty();
         expect(result).toStrictEqual(
             {
-                id: null,
-                uid: null,
+                id: undefined,
+                auth_id: undefined,
                 name: "",
                 email: "",
                 first_name: "",
