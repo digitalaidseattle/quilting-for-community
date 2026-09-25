@@ -87,7 +87,7 @@ describe("ProfilesService unit tests", () => {
         const findBySpy = vitest.spyOn(mockDao, 'findBy').mockResolvedValue([profile1, profile2]);
         service.getByUid('test_uid')
             .catch(err => {
-                expect(findBySpy).toHaveBeenCalledWith('uid', 'test_uid');
+                expect(findBySpy).toHaveBeenCalledWith('auth_id', 'test_uid');
                 expect(err.message).toBe('More than one profile found with uid= test_uid')
             })
     });

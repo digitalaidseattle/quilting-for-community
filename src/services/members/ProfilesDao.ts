@@ -9,7 +9,7 @@ import { DataAccessOptions, Entity, Identifier, QueryModel } from "@digitalaidse
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 
 export type Profile = Entity & {
-    auth_id: string | null;
+    auth_id: string | null | undefined;
     name: string;
     first_name?: string;
     last_name?: string;

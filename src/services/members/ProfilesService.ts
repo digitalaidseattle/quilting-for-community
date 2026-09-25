@@ -6,7 +6,6 @@
  */
 import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaidseattle/core";
 import { Profile, ProfilesDao, UpsertProfile } from "./ProfilesDao";
-import { v4 as uuid } from "uuid";
 
 export type ProfileLabelSource = Pick<Profile, 'id' | 'name' | 'email' | 'first_name' | 'last_name'>;
 
@@ -29,8 +28,8 @@ export class ProfilesService {
 
     empty(): Profile {
         return {
-            id: null,
-            uid: null,
+            id: undefined,
+            auth_id: undefined,
             name: "",
             email: "",
             first_name: "",
@@ -71,8 +70,15 @@ export class ProfilesService {
         return this.dao.getById(id);
     }
 
-    async getByAuthId(authId: Identifier): Promise<Profile | null> {
-        return this.dao.getByAuthId(authId);
+    async getByUid(uid: Identifier): Promise<Profile | null> {
+        const matches = await this.dao.findBy('auth_id', uid);
+        if (matches.length === 0) {
+            return null;
+        }
+        if (matches.length === 1) {
+            return matches[0];
+        }
+        throw new Error(`More than one profile found with auth_id= ${uid}`);
     }
 
     async batchInsert(entities: Profile[], opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
@@ -86,8 +92,7 @@ export class ProfilesService {
         // we have an on_auth_user_created trigger that creates profiles
         // when a user is created.
 
-        const seeded = { ...entity, id: uuid() };
-        return this.dao.insert(seeded, opts);
+        return this.dao.insert(entity, opts);
     }
 
     async update(entityId: Identifier, updatedFields: Partial<Profile>, opts?: DataAccessOptions<Profile>): Promise<Profile> {

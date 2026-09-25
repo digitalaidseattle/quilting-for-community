@@ -95,6 +95,7 @@ export const MembersPage = () => {
         ...profile,
         ...updated
       }
+      console.log(updated, newProfile)
       profilesService.insert(newProfile)
         .then(result => {
           setProfile(undefined);
@@ -121,14 +122,14 @@ export const MembersPage = () => {
 
         <Box sx={{ flex: 1 }} />
 
-        <ColumnsPanelTrigger render={<IconButton><TableOutlined /></IconButton>} />
-        <FilterPanelTrigger render={<IconButton><FilterOutlined /></IconButton>} />
-        <ExportCsv render={<IconButton><ExportOutlined /></IconButton>} />
+        <ColumnsPanelTrigger render={<Tooltip title={"Manage columns"}><IconButton ><TableOutlined /></IconButton></Tooltip>} />
+        <FilterPanelTrigger render={<Tooltip title={"Filter rows"}><IconButton ><FilterOutlined /></IconButton></Tooltip>} />
+        <ExportCsv render={<Tooltip title={"Export"}><IconButton><ExportOutlined /></IconButton></Tooltip>} />
         <QuickSearch onChange={search => console.log(search)} />
       </Toolbar>
-   );
+    );
   }
-  
+
   function createQueryModel(): QueryModel {
     const filterItems: FilterItem[] = [];
     if (filterModel && filterModel.items.length > 0) {

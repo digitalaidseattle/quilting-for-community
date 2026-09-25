@@ -91,12 +91,14 @@ export default function ProfileDialog({
                     />
                     <TextField
                         label="First Name"
+                        {...register('first_name')}
                         error={!!errors.first_name}
                         helperText={errors.first_name?.message}
                         sx={{ minHeight: '75px' }}
                     />
                     <TextField
                         label="Last Name"
+                        {...register('last_name')}
                         error={!!errors.last_name}
                         helperText={errors.last_name?.message}
                         sx={{ minHeight: '75px' }}
@@ -120,6 +122,7 @@ export default function ProfileDialog({
                     />
                     <TextField
                         label="Phone"
+                        {...register('phone')}
                         error={!!errors.phone}
                         helperText={errors.phone?.message}
                         sx={{ minHeight: '75px' }}
