@@ -13,7 +13,7 @@ describe("ProfilesService unit tests", () => {
         service = new ProfilesService(mockDao);
     });
 
-    test("update should strip id, auth_id, and roles", async () => {
+    test("update should strip id, auth_id, and roles but keep status", async () => {
         expect.assertions(1);
 
         const updateData: Partial<Profile> = {
@@ -22,7 +22,8 @@ describe("ProfilesService unit tests", () => {
             email: "keep@example.org",
             phone: "7605555555",
             roles: ["member", "admin"],
-            waiver_accepted: true
+            waiver_accepted: true,
+            status: "inactive"
         }
 
         await service.update("mock-uuid", updateData);
@@ -30,8 +31,17 @@ describe("ProfilesService unit tests", () => {
         expect(mockDao.update).toHaveBeenCalledWith("mock-uuid", {
             email: updateData.email,
             phone: updateData.phone,
-            waiver_accepted: updateData.waiver_accepted
+            waiver_accepted: updateData.waiver_accepted,
+            status: updateData.status
         }, undefined)
+    });
+
+    test("updateStatus calls dao.update with just the status", async () => {
+        expect.assertions(1);
+
+        await service.updateStatus("mock-uuid", "inactive");
+
+        expect(mockDao.update).toHaveBeenCalledWith("mock-uuid", { status: "inactive" }, undefined)
     });
 
     test("upsert should strip roles", async () => {
@@ -44,7 +54,8 @@ describe("ProfilesService unit tests", () => {
             email: "keep@example.org",
             phone: "7605555555",
             roles: ["member", "admin"],
-            waiver_accepted: true
+            waiver_accepted: true,
+            status: "active"
         }
 
         await service.upsert(profileData);
@@ -57,7 +68,8 @@ describe("ProfilesService unit tests", () => {
             last_name: profileData.last_name,
             email: profileData.email,
             phone: profileData.phone,
-            waiver_accepted: profileData.waiver_accepted
+            waiver_accepted: profileData.waiver_accepted,
+            status: profileData.status
         }, undefined)
     });
 

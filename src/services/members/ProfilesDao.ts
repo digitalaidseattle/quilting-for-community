@@ -8,6 +8,8 @@
 import { DataAccessOptions, Entity, Identifier, QueryModel } from "@digitalaidseattle/core";
 import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase";
 
+export type ProfileStatus = 'active' | 'inactive';
+
 export type Profile = Entity & {
     auth_id: string | null;
     name: string;
@@ -17,6 +19,7 @@ export type Profile = Entity & {
     phone: string;
     roles: string[];
     waiver_accepted: boolean;
+    status: ProfileStatus;
 }
 
 // Partial<Profile> but id is required

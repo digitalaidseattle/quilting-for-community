@@ -5,7 +5,7 @@
  *
  */
 import { DataAccessOptions, Identifier, PageInfo, QueryModel } from "@digitalaidseattle/core";
-import { Profile, ProfilesDao, UpsertProfile } from "./ProfilesDao";
+import { Profile, ProfilesDao, ProfileStatus, UpsertProfile } from "./ProfilesDao";
 
 export type ProfileLabelSource = Pick<Profile, 'id' | 'name' | 'email' | 'first_name' | 'last_name'>;
 
@@ -82,6 +82,14 @@ export class ProfilesService {
         const { id: _id, auth_id: _auth_id, roles: _roles, ...cleanedFields } = updatedFields;
 
         return this.dao.update(entityId, cleanedFields, opts);
+    }
+
+    /**
+     * Enable/disable a profile. Admin-only: for a non-admin the DB silently
+     * reverts the change (see set_profile_updated_at), same as it does for email.
+     */
+    async updateStatus(entityId: Identifier, status: ProfileStatus, opts?: DataAccessOptions<Profile>): Promise<Profile> {
+        return this.dao.update(entityId, { status }, opts);
     }
 
     async delete(entityId: Identifier): Promise<void> {
