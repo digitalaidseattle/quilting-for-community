@@ -116,7 +116,8 @@ describe("ProfilesService unit tests", () => {
                 last_name: "",
                 phone: "",
                 roles: [],
-                waiver_accepted: false
+                waiver_accepted: false,
+                status: "active"
             }
         )
     });

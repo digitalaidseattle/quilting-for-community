@@ -36,7 +36,8 @@ export class ProfilesService {
             last_name: "",
             phone: "",
             roles: [],
-            waiver_accepted: false
+            waiver_accepted: false,
+            status: "active"
         }
     }
 
