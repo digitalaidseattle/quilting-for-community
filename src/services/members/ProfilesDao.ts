@@ -11,7 +11,7 @@ import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase"
 export type ProfileStatus = 'active' | 'inactive';
 
 export type Profile = Entity & {
-    auth_id: string | null;
+    auth_id: string | null | undefined;
     name: string;
     first_name?: string;
     last_name?: string;
@@ -77,6 +77,45 @@ export class ProfilesDao extends SupabaseDAO<Profile> {
             return rows && rows.length > 0 ? rows[0] : null;
         } catch (err) {
             console.log("getByAuthId error: ", err);
+            throw err;
+        }
+    }
+
+    // TODO promote to SupabaseDao
+    async findBy(field: string, value: any, opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
+        try {
+            const select = this.getSelect(opts!);
+            const mapper = this.getMapper(opts!);
+
+            const { data, error } = await this.client.from(this.tableName)
+                .select(select)
+                .eq(field, value)
+            if (error) {
+                console.error('Unexpected error during select', error);
+                throw new Error('Unexpected error during select');
+            }
+            return data.map(elem => mapper(elem));
+        } catch (err) {
+            console.error('Unexpected error during select:', err);
+            throw err;
+        }
+    }
+
+    async searchBy(field: string, value: any, opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
+        try {
+            const select = this.getSelect(opts!);
+            const mapper = this.getMapper(opts!);
+
+            const { data, error } = await this.client.from(this.tableName)
+                .select(select)
+                .ilike(field, value)
+            if (error) {
+                console.error('Unexpected error during select', error);
+                throw new Error('Unexpected error during select');
+            }
+            return data.map(elem => mapper(elem));
+        } catch (err) {
+            console.error('Unexpected error during select:', err);
             throw err;
         }
     }
