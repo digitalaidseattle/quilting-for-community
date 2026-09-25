@@ -3,6 +3,7 @@ import {
     EventsService,
     normalizeSessionParts,
     sessionsForCancelledEvent,
+    withSortedSessions,
 } from "./EventsService";
 import { EventsEntityService } from "./EventsEntityService";
 import { EventSessionsService } from "./EventSessionsService";
@@ -176,5 +177,27 @@ describe("EventsService.save", () => {
         expect(draft.part).toBe(1);
         expect(draft.instructor_id).toBeNull();
         expect(draft.status).toBe('draft');
+    });
+});
+
+describe("withSortedSessions", () => {
+    test("sorts sessions by start_at", () => {
+        const event = {
+            name: "Intro",
+            event_sessions: [
+                session({ id: "later", start_at: "2026-09-10T17:00:00.000Z" }),
+                session({ id: "earlier", start_at: "2026-09-03T17:00:00.000Z" }),
+            ],
+        } as Event;
+
+        expect(withSortedSessions(event).event_sessions?.map((s) => s.id)).toEqual([
+            "earlier",
+            "later",
+        ]);
+    });
+
+    test("leaves events without sessions unchanged", () => {
+        const event = { name: "Intro" } as Event;
+        expect(withSortedSessions(event).event_sessions).toBeUndefined();
     });
 });

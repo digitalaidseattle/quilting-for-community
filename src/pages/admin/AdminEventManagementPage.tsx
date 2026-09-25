@@ -21,10 +21,11 @@ import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext } from
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
-import { EventsService } from "../../services/events/EventsService";
+import { EventsService, withSortedSessions } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { Event, EventSession } from "../../services/events/types";
 import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
+import { escapeIlikePattern } from "../../utils/ilike";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
 
 // Month view can show up to a week of adjacent months on either side.
@@ -59,7 +60,7 @@ export const AdminEventManagementPage = () => {
     function searchFilterItems(): FilterItem[] {
         const term = search.trim();
         if (!term) return [];
-        return [{ field: 'search_key', operator: 'contains', value: term }];
+        return [{ field: 'search_key', operator: 'contains', value: escapeIlikePattern(term) }];
     }
 
     function handleSearchChange(value: string) {
@@ -130,7 +131,7 @@ export const AdminEventManagementPage = () => {
     }
 
     async function handleSessionTimesChange(session: EventSession, startAt: string, endAt: string) {
-        setCalendarEvents((prev) => prev.map((event) => ({
+        setCalendarEvents((prev) => prev.map((event) => withSortedSessions({
             ...event,
             event_sessions: (event.event_sessions ?? []).map((s) =>
                 s.id === session.id ? { ...s, start_at: startAt, end_at: endAt } : s

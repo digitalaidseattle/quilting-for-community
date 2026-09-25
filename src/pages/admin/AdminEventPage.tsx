@@ -35,10 +35,10 @@ import { LoadingContext, QueryModel } from "@digitalaidseattle/core";
 import { EventCategorySelect } from "../../components/EventCategorySelect";
 import { NumberField } from "../../components/NumberField";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
-import { EventsService, normalizeSessionParts } from "../../services/events/EventsService";
 import { EventsDao } from "../../services/events/EventsDao";
+import { EventsService, normalizeSessionParts } from "../../services/events/EventsService";
 import { Event, EventInstructor, EventSession, SessionStatus } from "../../services/events/types";
-import { eventFormResolver } from "../../services/events/eventValidation";
+import { eventFormResolver, MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from "../../services/events/eventValidation";
 import { Profile } from "../../services/members/ProfilesDao";
 import { ProfilesService } from "../../services/members/ProfilesService";
 import {
@@ -118,7 +118,7 @@ function applyStartAndDuration(
     if (!wallDate || Number.isNaN(wallDate.getTime())) {
         return { start_at: '', end_at: '' };
     }
-    const duration = Math.max(1, values.duration);
+    const duration = Math.max(MIN_DURATION_MINUTES, values.duration);
     return {
         start_at: wallDateToUtcIso(wallDate, timeZone),
         end_at: wallDateToUtcIso(new Date(wallDate.getTime() + duration * 60000), timeZone),
@@ -344,7 +344,7 @@ export const AdminEventPage = () => {
     }
 
     function buildNormalizedSession(values: SessionFormValues): EventSession | null {
-        if (!values.start_at || values.duration < 1) return null;
+        if (!values.start_at || values.duration < MIN_DURATION_MINUTES || values.duration > MAX_DURATION_MINUTES) return null;
 
         const startWall = utcIsoToWallDate(values.start_at, timeZone);
         const { duration, ...sessionFields } = values;
@@ -452,7 +452,6 @@ export const AdminEventPage = () => {
     ];
 
     const sessionStartError = sessionErrors.start_at?.message;
-    const sessionDurationError = sessionErrors.duration?.message;
     const sessionMaxSeatsError = sessionErrors.max_seats?.message;
 
     function renderSessionGrid(rows: EventSession[]) {
@@ -621,7 +620,9 @@ export const AdminEventPage = () => {
                                             label="Default duration (minutes)"
                                             value={field.value}
                                             onChange={field.onChange}
-                                            min={1}
+                                            min={MIN_DURATION_MINUTES}
+                                            max={MAX_DURATION_MINUTES}
+                                            required
                                             error={Boolean(fieldState.error)}
                                             helperText={fieldState.error?.message ?? 'Used when adding new sessions'}
                                             sx={{ flex: 1 }}
@@ -885,7 +886,15 @@ export const AdminEventPage = () => {
                                     control={sessionControl}
                                     rules={{
                                         required: 'Duration must be at least 1 minute',
-                                        min: { value: 1, message: 'Duration must be at least 1 minute' },
+                                        validate: (value) => {
+                                            if (value < MIN_DURATION_MINUTES) {
+                                                return 'Duration must be at least 1 minute';
+                                            }
+                                            if (value > MAX_DURATION_MINUTES) {
+                                                return 'Duration cannot exceed 24 hours (1440 minutes)';
+                                            }
+                                            return true;
+                                        },
                                     }}
                                     render={({ field, fieldState }) => (
                                         <NumberField
@@ -893,17 +902,22 @@ export const AdminEventPage = () => {
                                             value={field.value}
                                             onChange={(minutes) => {
                                                 field.onChange(minutes);
-                                                if (minutes < 1 || !getSessionValues('start_at')) return;
+                                                if (
+                                                    minutes < MIN_DURATION_MINUTES
+                                                    || minutes > MAX_DURATION_MINUTES
+                                                    || !getSessionValues('start_at')
+                                                ) return;
                                                 const startWall = utcIsoToWallDate(getSessionValues('start_at'), timeZone);
                                                 setSessionValue(
                                                     'end_at',
                                                     wallDateToUtcIso(new Date(startWall.getTime() + minutes * 60000), timeZone),
                                                 );
                                             }}
-                                            min={1}
+                                            min={MIN_DURATION_MINUTES}
+                                            max={MAX_DURATION_MINUTES}
                                             required
                                             error={Boolean(fieldState.error)}
-                                            helperText={sessionDurationError || `Event default: ${event.duration} min`}
+                                            helperText={fieldState.error?.message || `Event default: ${event.duration} min`}
                                             sx={{ width: 200 }}
                                         />
                                     )}
