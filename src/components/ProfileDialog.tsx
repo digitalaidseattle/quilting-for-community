@@ -30,6 +30,8 @@ export default function ProfileDialog({
     const {
         register,
         handleSubmit,
+        getValues,
+        clearErrors,
         reset,
         formState: { errors, validatingFields, isDirty },
     } = useForm<Profile>({
@@ -54,7 +56,7 @@ export default function ProfileDialog({
     async function isNameAvailable(value: string): Promise<boolean> {
         await new Promise(resolve => setTimeout(resolve, 300));
         const trimmed = value.trim();
-        const response = await profilesService.findBy('name', trimmed)
+        const response = await profilesService.findBy('name', trimmed.toLowerCase())
         return response.length === 0;
     }
 
@@ -62,7 +64,7 @@ export default function ProfileDialog({
         await new Promise(resolve => setTimeout(resolve, 300));
         const trimmed = value.trim();
         if (trimmed.length > 0) {
-            const response = await profilesService.findBy('email', trimmed)
+            const response = await profilesService.findBy('email', trimmed.toLowerCase())
             return response.length === 0;
         }
         return true;
@@ -77,30 +79,31 @@ export default function ProfileDialog({
             <DialogContent>
                 <Stack spacing={2}>
                     <TextField
-                        label="Name"
-                        {...register('name', {
-                            required: 'Name is required',
+                        label="First Name"
+                        {...register('first_name', {
                             validate: async (value) => {
-                                const available = await isNameAvailable(value);
-                                return available || 'This first name is already in use';
+                                const fullName = `${value} ${getValues('last_name')}`.toLowerCase();
+                                const available = await isNameAvailable(fullName);
+                                if (available) clearErrors('last_name');
+                                return available || `This name, ${fullName}, is already in use`;
                             },
                         })}
-                        error={!!errors.name}
-                        helperText={errors.name?.message || (validatingFields.name ? 'Checking availability...' : undefined)}
-                        sx={{ minHeight: '75px' }}  //TODO  minHeight avoids layout resizing,  may have to make this more repsonsive
-                    />
-                    <TextField
-                        label="First Name"
-                        {...register('first_name')}
-                        error={!!errors.first_name}
-                        helperText={errors.first_name?.message}
+                        error={!!(errors.first_name || errors.last_name)}
+                        helperText={errors.first_name?.message || (validatingFields.first_name ? 'Checking availability...' : undefined)}
                         sx={{ minHeight: '75px' }}
                     />
                     <TextField
                         label="Last Name"
-                        {...register('last_name')}
-                        error={!!errors.last_name}
-                        helperText={errors.last_name?.message}
+                        {...register('last_name', {
+                            validate: async (value) => {
+                                const fullName = `${getValues('first_name')} ${value}`.toLowerCase();
+                                const available = await isNameAvailable(fullName);
+                                if (available) clearErrors('first_name');
+                                return available || `This name, ${fullName}, is already in use`;
+                            },
+                        })}
+                        error={!!(errors.first_name || errors.last_name)}
+                        helperText={errors.last_name?.message || (validatingFields.last_name ? 'Checking availability...' : undefined)}
                         sx={{ minHeight: '75px' }}
                     />
                     <TextField

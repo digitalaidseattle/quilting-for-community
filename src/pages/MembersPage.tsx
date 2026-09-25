@@ -104,8 +104,8 @@ export const MembersPage = () => {
           notifications.success(`Member ${result.name} has been added.`)
         })
         .catch(err => {
-          console.error(`Problems adding ${newProfile.name}.`, err);
-          notifications.error(`Problems adding ${newProfile.name}.`)
+          console.error(`Problems adding ${newProfile.first_name} ${newProfile.last_name}.`, err);
+          notifications.error(`Problems adding ${newProfile.first_name} ${newProfile.last_name}.`)
         })
     }
   }

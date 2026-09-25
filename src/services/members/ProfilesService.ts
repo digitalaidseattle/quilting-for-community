@@ -91,8 +91,14 @@ export class ProfilesService {
     async insert(entity: Profile, opts?: DataAccessOptions<Profile>): Promise<Profile> {
         // we have an on_auth_user_created trigger that creates profiles
         // when a user is created.
-
-        return this.dao.insert(entity, opts);
+        const updated = {
+            ...entity,
+            name: `${entity.first_name} ${entity.last_name}`.toLowerCase()
+        }
+        delete updated.id;
+        delete updated.auth_id;
+        console.log(updated);
+        return this.dao.insert(updated, opts);
     }
 
     async update(entityId: Identifier, updatedFields: Partial<Profile>, opts?: DataAccessOptions<Profile>): Promise<Profile> {
@@ -100,7 +106,14 @@ export class ProfilesService {
         // NOTE: email is only actually editable for login-less profiles; for
         // linked profiles the DB silently reverts it (see set_profile_updated_at)
         // since it's meant to mirror auth.users.email via handle_new_user
-        const { id: _id, auth_id: _auth_id, roles: _roles, ...cleanedFields } = updatedFields;
+        const { id: _id,
+            auth_id: _auth_id,
+            roles: _roles,
+            ...cleanedFields
+        } = {
+            ...updatedFields,
+            name: `${updatedFields.first_name} ${updatedFields.last_name}`.toLowerCase()
+        };
 
         return this.dao.update(entityId, cleanedFields, opts);
     }
@@ -121,4 +134,6 @@ export class ProfilesService {
     async findBy(field: string, value: any): Promise<Profile[]> {
         return this.dao.findBy(field, value);
     }
+
 }
+
