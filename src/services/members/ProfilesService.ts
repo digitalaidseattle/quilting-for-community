@@ -93,11 +93,10 @@ export class ProfilesService {
         // when a user is created.
         const updated = {
             ...entity,
-            name: `${entity.first_name} ${entity.last_name}`.toLowerCase()
+            name: (entity.first_name || entity.last_name) ? `${entity.first_name ?? ''} ${entity.last_name}`.toLowerCase() : ''
         }
         delete updated.id;
         delete updated.auth_id;
-        console.log(updated);
         return this.dao.insert(updated, opts);
     }
 
@@ -112,7 +111,7 @@ export class ProfilesService {
             ...cleanedFields
         } = {
             ...updatedFields,
-            name: `${updatedFields.first_name} ${updatedFields.last_name}`.toLowerCase()
+            name: (updatedFields.first_name || updatedFields.last_name) ? `${updatedFields.first_name ?? ''} ${updatedFields.last_name}`.toLowerCase() : undefined
         };
 
         return this.dao.update(entityId, cleanedFields, opts);
