@@ -97,7 +97,6 @@ export class ProfilesService {
             name: (entity.first_name || entity.last_name) ? `${entity.first_name ?? ''} ${entity.last_name}` : ''
         }
         delete updated.id;  // let DB do the work; alternatively we could use uuid() here
-        delete updated.auth_id;
         return this.dao.insert(updated, opts);
     }
 
