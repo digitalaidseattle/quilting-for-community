@@ -93,8 +93,7 @@ export class ProfilesService {
         // we have an on_auth_user_created trigger that creates profiles
         // when a user is created.
         const updated: any = {
-            ...entity,
-            name: (entity.first_name || entity.last_name) ? `${entity.first_name ?? ''} ${entity.last_name}` : ''
+            ...entity
         }
         delete updated.id;  // let DB do the work; alternatively we could use uuid() here
         return this.dao.insert(updated, opts);
@@ -110,8 +109,7 @@ export class ProfilesService {
             roles: _roles,
             ...cleanedFields
         } = {
-            ...updatedFields,
-            name: (updatedFields.first_name || updatedFields.last_name) ? `${updatedFields.first_name ?? ''} ${updatedFields.last_name}` : undefined
+            ...updatedFields
         };
 
         return this.dao.update(entityId, cleanedFields, opts);
