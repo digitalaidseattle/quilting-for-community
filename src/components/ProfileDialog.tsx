@@ -30,8 +30,6 @@ export default function ProfileDialog({
     const {
         register,
         handleSubmit,
-        getValues,
-        clearErrors,
         reset,
         formState: { errors, validatingFields, isDirty },
     } = useForm<Profile>({
