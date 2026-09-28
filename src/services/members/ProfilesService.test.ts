@@ -160,8 +160,8 @@ describe("ProfilesService unit tests", () => {
         const result = service.empty();
         expect(result).toStrictEqual(
             {
-                id: undefined,
-                auth_id: undefined,
+                id: null,
+                auth_id: null,
                 name: "",
                 email: "",
                 first_name: "",

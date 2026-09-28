@@ -11,7 +11,7 @@ import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase"
 export type ProfileStatus = 'active' | 'inactive';
 
 export type Profile = Entity & {
-    auth_id: string | null | undefined;
+    auth_id: string | null;
     name: string;
     first_name?: string;
     last_name?: string;

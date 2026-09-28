@@ -28,8 +28,8 @@ export class ProfilesService {
 
     empty(): Profile {
         return {
-            id: undefined,
-            auth_id: undefined,
+            id: null,
+            auth_id: null,
             name: "",
             email: "",
             first_name: "",
@@ -92,11 +92,11 @@ export class ProfilesService {
     async insert(entity: Profile, opts?: DataAccessOptions<Profile>): Promise<Profile> {
         // we have an on_auth_user_created trigger that creates profiles
         // when a user is created.
-        const updated = {
+        const updated: any = {
             ...entity,
             name: (entity.first_name || entity.last_name) ? `${entity.first_name ?? ''} ${entity.last_name}` : ''
         }
-        delete updated.id;
+        delete updated.id;  // let DB do the work; alternatively we could use uuid() here
         delete updated.auth_id;
         return this.dao.insert(updated, opts);
     }

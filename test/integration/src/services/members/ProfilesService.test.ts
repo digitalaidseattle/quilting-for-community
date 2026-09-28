@@ -457,8 +457,9 @@ describe("ProfilesService", () => {
             // (auth_id would let an admin backdoor-link a profile; roles is
             // set_user_roles-only), so they're left as their column defaults.
             const profile = await adminProfileService.insert({
-                auth_id: undefined,
-                name: "Login-less Profile",
+                auth_id: null,
+                first_name: "Login-less",
+                last_name: 'Profile',
                 email: `PROFILE_SERVICE_TEST_NOLOGIN_ADMIN_${uniqueSuffix()}@example.com`,
                 phone: "",
                 waiver_accepted: false
@@ -466,7 +467,7 @@ describe("ProfilesService", () => {
             if (profile?.id) loginlessProfileIds.push(String(profile.id));
 
             expect(profile.id).not.toBeNull();
-            expect(profile.auth_id).toBeUndefined();
+            expect(profile.auth_id).toBeNull();
         });
 
         test("insert cannot set auth_id or roles directly", async () => {
@@ -494,7 +495,7 @@ describe("ProfilesService", () => {
             const profile = await createLoginlessProfile("GETUPDATE");
 
             const fetched = await adminProfileService.getById(profile.id);
-            expect(fetched?.auth_id).toBeUndefined();
+            expect(fetched?.auth_id).toBeNull();
 
             const updated = await adminProfileService.update(profile.id, { last_name: "Loginless" });
             expect(updated.last_name).toEqual("Loginless");
