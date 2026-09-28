@@ -79,31 +79,12 @@ export default function ProfileDialog({
             <DialogContent>
                 <Stack spacing={2}>
                     <TextField
-                        label="First Name"
-                        {...register('first_name', {
-                            validate: async (value) => {
-                                const fullName = `${value} ${getValues('last_name')}`.toLowerCase();
-                                const available = await isNameAvailable(fullName);
-                                if (available) clearErrors('last_name');
-                                return available || `This name, ${fullName}, is already in use`;
-                            },
+                        label="Name"
+                        {...register('name', {
+                            required: true,
                         })}
-                        error={!!(errors.first_name || errors.last_name)}
-                        helperText={errors.first_name?.message || (validatingFields.first_name ? 'Checking availability...' : undefined)}
-                        sx={{ minHeight: '75px' }}
-                    />
-                    <TextField
-                        label="Last Name"
-                        {...register('last_name', {
-                            validate: async (value) => {
-                                const fullName = `${getValues('first_name')} ${value}`.toLowerCase();
-                                const available = await isNameAvailable(fullName);
-                                if (available) clearErrors('first_name');
-                                return available || `This name, ${fullName}, is already in use`;
-                            },
-                        })}
-                        error={!!(errors.first_name || errors.last_name)}
-                        helperText={errors.last_name?.message || (validatingFields.last_name ? 'Checking availability...' : undefined)}
+                        error={!!errors.name}
+                        helperText={errors.name?.message}
                         sx={{ minHeight: '75px' }}
                     />
                     <TextField
@@ -120,7 +101,7 @@ export default function ProfileDialog({
                             },
                         })}
                         error={!!errors.email}
-                        helperText={errors.email?.message}
+                        helperText={errors.email?.message || (validatingFields.email ? 'Checking availability...' : undefined)}
                         sx={{ minHeight: '75px' }}
                     />
                     <TextField
