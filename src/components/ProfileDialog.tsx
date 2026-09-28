@@ -4,8 +4,8 @@
  * @copyright 2026 Digital Aid Seattle
  */
 
-import { useEffect } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material';
+import { useEffect } from 'react';
 import { SubmitHandler, useForm } from 'react-hook-form';
 
 import { Profile } from '../services/members/ProfilesDao';
@@ -52,13 +52,6 @@ export default function ProfileDialog({
     const onSubmit: SubmitHandler<Profile> = (data: Profile) => {
         onChange(data);
     };
-
-    async function isNameAvailable(value: string): Promise<boolean> {
-        await new Promise(resolve => setTimeout(resolve, 300));
-        const trimmed = value.trim();
-        const response = await profilesService.searchBy('name', trimmed)
-        return response.length === 0;
-    }
 
     async function isEmailAvailable(value: string): Promise<boolean> {
         await new Promise(resolve => setTimeout(resolve, 300));
