@@ -9,9 +9,9 @@ import { Profile, ProfilesDao } from "./ProfilesDao";
 
 
 const DUMMY_PROFILES: Profile[] = [
-    { id: '1', auth_id: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted: true },
-    { id: '2', auth_id: null, name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted: true },
-    { id: '3', auth_id: null, name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted: false },
+    { id: '1', auth_id: '1', name: 'John Doe', email: 'john.doe@example.com', phone: '123-456-7890', roles: ["member", "instructor"], waiver_accepted: true, status: 'active' },
+    { id: '2', auth_id: null, name: 'Example User', email: 'example.user@example.com', phone: '123-456-7890', roles: ["instructor"], waiver_accepted: true, status: 'active' },
+    { id: '3', auth_id: null, name: 'Place Holder', email: 'place.holder@example.com', phone: '123-456-7890', roles: ["member"], waiver_accepted: false, status: 'active' },
 ] as Profile[];
 
 export class MockProfilesService {
