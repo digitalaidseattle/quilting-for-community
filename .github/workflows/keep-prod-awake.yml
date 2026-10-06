@@ -1,0 +1,25 @@
+name: Keep production awake
+
+# Supabase Free projects pause after a week with no API requests, and resuming
+# them is a manual click in the dashboard. A twice-weekly request keeps
+# production up. PRODUCTION_SUPABASE_URL / PRODUCTION_SUPABASE_ANON_KEY are
+# repository *variables*, not secrets -- the anon key is public and already
+# ships in the client bundle.
+
+on:
+  schedule:
+    - cron: "0 12 * * 1,4"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    name: Ping the production project
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Request the production REST health endpoint
+        run: |
+          curl -sSf "$URL/auth/v1/health" -H "apikey: $KEY"
+        env:
+          URL: ${{ vars.PRODUCTION_SUPABASE_URL }}
+          KEY: ${{ vars.PRODUCTION_SUPABASE_ANON_KEY }}
