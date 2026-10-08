@@ -1,4 +1,5 @@
 -- Local development sample data. Loaded via db.seed in config.toml on `supabase db reset`.
+-- Depends on test_data/users.sql (admin profile used as session instructor).
 
 insert into public.events (
   id, name, description, notes, category, duration,
@@ -21,7 +22,10 @@ values (
   'published'
 ) on conflict (id) do nothing;
 
-insert into public.event_sessions (id, event_id, start_at, end_at, max_seats, status, description)
+-- Two-part class: part 1 published (needs instructor), part 2 still draft.
+insert into public.event_sessions (
+  id, event_id, start_at, end_at, max_seats, status, part, instructor_id
+)
 values
   (
     'c0000000-0000-4000-8000-000000000001',
@@ -30,7 +34,8 @@ values
     (date_trunc('week', now()) + interval '10 days' + interval '12 hours'),
     null,
     'published',
-    'Week 1: fabric prep, cutting, and basic piecing.'
+    1,
+    (select id from public.profiles where auth_id = 'a0000000-0000-4000-8000-000000000001')
   ),
   (
     'c0000000-0000-4000-8000-000000000002',
@@ -39,6 +44,7 @@ values
     (date_trunc('week', now()) + interval '17 days' + interval '12 hours'),
     8,
     'draft',
-    'Week 2: assemble a small top and finish edges.'
+    2,
+    null
   )
 on conflict (id) do nothing;

@@ -3,7 +3,7 @@
  * 
  * @copyright 2026 Digital Aid Seattle
 */
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { HomeOutlined } from "@ant-design/icons";
@@ -23,6 +23,32 @@ import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
 import { ProfilesService } from "../services/members/ProfilesService";
 
+
+function createQueryModel(
+  paginationModel: { page: number, pageSize: number },
+  sortModel: GridSortModel,
+  filterModel: GridFilterModel,
+): QueryModel {
+  const filterItems: FilterItem[] = [];
+  if (filterModel && filterModel.items.length > 0) {
+    const filterItem = filterModel.items[0];
+    filterItems.push({
+      field: filterItem.field,
+      operator: filterItem.operator,
+      value: filterItem.value
+    })
+  }
+  const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
+  const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
+  return {
+    ...paginationModel,
+    sortField: sortField,
+    sortDirection: sortDirection,
+    filterModel: {
+      items: filterItems
+    }
+  } as QueryModel;
+}
 
 // ==============================|| SAMPLE PAGE ||============================== //
 
@@ -53,45 +79,21 @@ export const MembersPage = () => {
     }
   ];
 
-  // API data fetch, uncomment to replace dummy data with real data
-  const fetchData = useCallback(() => {
+  const notificationsRef = useRef(notifications);
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  });
+
+  useEffect(() => {
     profilesService
-      .find(createQueryModel())
+      .find(createQueryModel(paginationModel, sortModel, filterModel))
       .then(data => setPageInfo(data))
       .catch(err => {
-        notifications.error('Error fetching profiles.');
+        notificationsRef.current.error('Error fetching profiles.');
         console.error('Error fetching profiles:', err);
       })
       .finally(() => setLoading(false));
-
-  }, [paginationModel, profilesService, setLoading, sortModel]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData, refresh])
-
-
-  function createQueryModel(): QueryModel {
-    const filterItems: FilterItem[] = [];
-    if (filterModel && filterModel.items.length > 0) {
-      const filterItem = filterModel.items[0];
-      filterItems.push({
-        field: filterItem.field,
-        operator: filterItem.operator,
-        value: filterItem.value
-      })
-    }
-    const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
-    const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
-    return {
-      ...paginationModel,
-      sortField: sortField,
-      sortDirection: sortDirection,
-      filterModel: {
-        items: filterItems
-      }
-    } as QueryModel;
-  }
+  }, [filterModel, paginationModel, profilesService, refresh, setLoading, sortModel]);
 
   function handleRowClick(params: GridRowParams<Profile>): void {
     navigate(`/members/${params.row.id}`)

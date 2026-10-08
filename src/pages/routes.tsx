@@ -12,6 +12,7 @@ import { MembersPage } from "./MembersPage";
 import { TransactionsPage } from "./TransactionsPage";
 import { ProductsPage } from "./ProductsPage";
 import { AdminEventManagementPage } from "./admin/AdminEventManagementPage";
+import { AdminEventPage } from "./admin/AdminEventPage";
 import { EventsPage } from "./EventsPage";
 import { ProfilePage } from "./ProfilePage";
 
@@ -35,7 +36,9 @@ const routes = [
       {
         path: "/members/:id",
         element: (
-          <ProfilePage />
+          <AuthGate authorizedRoles={["admin"]}>
+            <ProfilePage />
+          </AuthGate>
         ),
       },
       {
@@ -47,6 +50,22 @@ const routes = [
         element: (
           <AuthGate authorizedRoles={["admin"]}>
             <AdminEventManagementPage />
+          </AuthGate>
+        ),
+      },
+      {
+        path: "/admin/event-management/new",
+        element: (
+          <AuthGate authorizedRoles={["admin"]}>
+            <AdminEventPage />
+          </AuthGate>
+        ),
+      },
+      {
+        path: "/admin/event-management/:id",
+        element: (
+          <AuthGate authorizedRoles={["admin"]}>
+            <AdminEventPage />
           </AuthGate>
         ),
       },
