@@ -395,3 +395,7 @@ client_id = "env(SUPABASE_GOOGLE_CLIENT_ID)" # Replace with your Google Client I
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)" # Use environment variable for security
 redirect_uri = "http://localhost:54321/auth/v1/callback"
 url = "http://localhost:3000"
+
+# Stripe calls this function directly without a Supabase JWT. Instead the function verifies Stripe's signature.
+[functions.stripe-webhook]
+verify_jwt = false
