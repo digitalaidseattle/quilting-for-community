@@ -1,18 +1,12 @@
--- Orders and payments: tables only. The functions that use them come in later
--- migrations.
+-- Orders and payments tables.
 --
 -- Shape: a person pays for an ORDER. An order has ORDER ITEMS, and an item
 -- points at the class that was bought. A PAYMENT belongs to an order.
 -- Registrations made as part of an order point at it.
 --
---   profile -< orders -< order_items >- events (class)
+--   profile -< orders -< order_items >- events
 --                 |-< payments
 --                 |-< event_registrations
---
--- * Money is stored in cents (integers).
--- * A paid registration starts 'pending' and holds its seat until its payment
---   succeeds or stops being pending.
--- * A payment's status column is the source of truth.
 
 begin;
 
@@ -22,7 +16,6 @@ create table public.orders (
   profile_id uuid not null references public.profiles(id) on delete restrict,
   status text not null default 'pending'
     check (status in ('pending', 'paid', 'cancelled', 'refunded')),
-  -- cents. sum of the order's items
   amount int not null check (amount >= 0),
   payment_date timestamptz,
   -- Chosen by the client and sent with the request that creates the order, so a
@@ -41,9 +34,7 @@ create index orders_status_idx on public.orders(status);
 create table public.order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
-  -- the event (class) this item pays for
-  class_id uuid not null references public.events(id) on delete restrict,
-  -- cents
+  event_id uuid not null references public.events(id) on delete restrict,
   amount int not null check (amount >= 0),
   created_at timestamptz default now(),
   created_by text,
@@ -52,18 +43,15 @@ create table public.order_items (
 );
 
 create index order_items_order_id_idx on public.order_items(order_id);
-create index order_items_class_id_idx on public.order_items(class_id);
+create index order_items_event_id_idx on public.order_items(event_id);
 
 create table public.payments (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete restrict,
-  -- 'stripe' is paid online. 'cash' and 'credit' are taken in person and
-  -- recorded by staff
   type text not null default 'stripe'
     check (type in ('cash', 'credit', 'stripe')),
   status text not null default 'pending'
     check (status in ('pending', 'succeeded', 'failed', 'refunded', 'cancelled')),
-  -- cents
   amount int not null check (amount > 0),
   currency text not null default 'usd',
   -- Stripe customer id (cus_...), reused on the person's next checkout
@@ -71,11 +59,9 @@ create table public.payments (
   -- Stripe payment intent id (pi_...), recorded by the webhook on success
   stripe_payment_id text,
   stripe_checkout_session_id text unique,
-  -- staff's note for a payment taken outside Stripe, e.g. the Clover receipt number
+  -- staff's note for a payment taken outside Stripe (e.g. the Clover receipt number)
   reference text,
   paid_at timestamptz,
-  -- When a pending payment stops holding its seats. Extended to outlast the
-  -- Stripe Checkout session.
   expires_at timestamptz,
   created_at timestamptz default now(),
   created_by text,
@@ -119,19 +105,14 @@ create unique index event_registrations_active_once_idx
   on public.event_registrations(session_id, profile_id)
   where status in ('pending', 'confirmed');
 
--- ---------------------------------------------------------------------------
 -- RLS: admins read everything. People read their own orders and payments. No
--- client writes, admins included: only security definer functions and the
--- service role write.
--- ---------------------------------------------------------------------------
-
+-- client writes, admins included. Only security definer functions and the service role write.
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 alter table public.payments enable row level security;
 
--- Start from nothing. Depending on its version, Supabase grants anon and
--- authenticated full access to every new table in public by default. RLS would
--- still hide the rows, but the grants below are meant to be the whole story.
+-- Supabase grants anon and authenticated full access to every new table in public by default. 
+-- Explicitly grant only the permissions we want.
 revoke all on public.orders, public.order_items, public.payments from public, anon, authenticated;
 grant select on public.orders, public.order_items, public.payments to authenticated;
 grant select, insert, update, delete on public.orders, public.order_items, public.payments to service_role;
@@ -142,8 +123,7 @@ create policy orders_select on public.orders
     public.is_admin()
     or profile_id in (select id from public.profiles where auth_id = auth.uid())
   );
--- Everything under an order is visible to whoever can see the order. The
--- subqueries are themselves filtered by the policy on the table they read.
+-- Everything under an order is visible to whoever can see the order. The subqueries are themselves filtered by the policy on the table they read.
 create policy order_items_select on public.order_items
   for select to authenticated
   using (order_id in (select id from public.orders));

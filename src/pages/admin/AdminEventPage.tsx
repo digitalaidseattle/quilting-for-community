@@ -804,8 +804,8 @@ export const AdminEventPage = () => {
                                         value={field.value}
                                         onChange={field.onChange}
                                         min={MIN_DURATION_MINUTES}
-                                            max={MAX_DURATION_MINUTES}
-                                            required
+                                        max={MAX_DURATION_MINUTES}
+                                        required
                                         error={Boolean(fieldState.error)}
                                         helperText={fieldState.error?.message}
                                         fullWidth
