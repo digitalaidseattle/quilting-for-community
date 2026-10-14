@@ -3,7 +3,9 @@ import process from "node:process";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 
 // Covers the database side of orders and paid registration (migrations
-// 20260929110000_orders_schema.sql and 20260929120000_paid_registration.sql).
+// 20260929110000_orders_schema.sql onward). Stripe itself is only reached from
+// the edge functions, so the service-role functions they call
+// (process_stripe_event, begin_checkout, ...) are called here directly.
 
 const SUPABASE_URL = "http://localhost:54321";
 
@@ -107,6 +109,24 @@ async function registrationStatuses(orderId: string): Promise<string[]> {
     return (data ?? []).map((r) => r.status).sort();
 }
 
+let eventCounter = 0;
+/** Send a Stripe-shaped event through the same entry point the webhook uses. */
+async function stripeEvent(type: string, data: Record<string, unknown>, eventId?: string) {
+    const id = eventId ?? `evt_test_${Date.now()}_${eventCounter++}`;
+    const result = await serviceRoleClient.rpc("process_stripe_event", { p_event_id: id, p_event_type: type, p_data: data });
+    return { id, outcome: result.data as string | null, error: result.error };
+}
+
+function paid(paymentId: string, intent = `pi_test_${Date.now()}_${eventCounter++}`) {
+    return {
+        payment_id: paymentId,
+        checkout_session_id: `cs_test_${intent}`,
+        payment_intent_id: intent,
+        customer_id: "cus_test_123",
+        paid: true,
+    };
+}
+
 async function cleanup(): Promise<void> {
     const { data: events } = await serviceRoleClient.from("events").select("id").ilike("name", `${TEST_PREFIX}%`);
     const eventIds = (events ?? []).map((event) => event.id);
@@ -122,6 +142,7 @@ async function cleanup(): Promise<void> {
         }
         await serviceRoleClient.from("events").delete().in("id", eventIds);
     }
+    await serviceRoleClient.from("stripe_webhook_events").delete().like("event_id", "evt_test_%");
     const { data: users } = await serviceRoleClient.auth.admin.listUsers({ perPage: 1000 });
     await Promise.all(
         (users?.users ?? [])
@@ -281,6 +302,108 @@ describe("orders and paid registration", () => {
         expect(second.error?.code).toBe("23505");
     });
 
+    test("a completed checkout marks the payment succeeded, the order paid, and confirms the registrations", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+        const event = paid(data[0].payment_id, "pi_test_complete");
+
+        const result = await stripeEvent("checkout.session.completed", event);
+        expect(result.error).toBeNull();
+        expect(result.outcome).toBe("processed");
+
+        expect(await row("payments", data[0].payment_id)).toMatchObject({
+            status: "succeeded",
+            stripe_payment_id: "pi_test_complete",
+            stripe_checkout_session_id: event.checkout_session_id,
+            provider_customer_id: "cus_test_123",
+        });
+        const order = await row("orders", data[0].order_id);
+        expect(order.status).toBe("paid");
+        expect(order.payment_date).not.toBeNull();
+        expect(await registrationStatuses(order.id)).toEqual(["confirmed"]);
+    });
+
+    test("the same Stripe event delivered twice is applied once", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+        const event = paid(data[0].payment_id);
+
+        const first = await stripeEvent("checkout.session.completed", event);
+        const paidAt = (await row("payments", data[0].payment_id)).paid_at;
+        const second = await stripeEvent("checkout.session.completed", event, first.id);
+
+        expect(first.outcome).toBe("processed");
+        expect(second.outcome).toBe("duplicate");
+        expect((await row("payments", data[0].payment_id)).paid_at).toBe(paidAt);
+
+        const { data: events } = await serviceRoleClient.from("stripe_webhook_events").select("status, event_type").eq("event_id", first.id);
+        expect(events).toEqual([{ status: "processed", event_type: "checkout.session.completed" }]);
+    });
+
+    test("an event that can't be applied is saved as failed and succeeds when redelivered", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+
+        // a payment id that isn't a UUID, so applying the event raises
+        const bad = await stripeEvent("checkout.session.completed", { ...paid(data[0].payment_id), payment_id: "not-a-uuid" });
+        expect(bad.error).toBeNull();
+        expect(bad.outcome).toBe("failed");
+        const { data: failedRow } = await serviceRoleClient.from("stripe_webhook_events").select("status, error").eq("event_id", bad.id).single();
+        expect(failedRow!.status).toBe("failed");
+        expect(failedRow!.error).toContain("not-a-uuid");
+
+        // Stripe redelivers the same event id. This time it can be applied.
+        const retry = await stripeEvent("checkout.session.completed", paid(data[0].payment_id), bad.id);
+        expect(retry.outcome).toBe("processed");
+        expect((await row("payments", data[0].payment_id)).status).toBe("succeeded");
+    });
+
+    test("a checkout this database doesn't know about is ignored, not retried", async () => {
+        // e.g. another environment using the same Stripe account
+        const result = await stripeEvent("checkout.session.completed", paid(crypto.randomUUID()));
+        expect(result.error).toBeNull();
+        expect(result.outcome).toBe("processed");
+    });
+
+    test("a completed but unpaid checkout doesn't confirm anything", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+        const result = await stripeEvent("checkout.session.completed", { ...paid(data[0].payment_id), paid: false });
+        expect(result.outcome).toBe("processed");
+        expect((await row("payments", data[0].payment_id)).status).toBe("pending");
+    });
+
+    test("an expired checkout cancels the payment and order and releases the seat", async () => {
+        const { eventId, sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+        expect(await seatsAvailable(eventId, sessionId)).toBe(1);
+
+        const result = await stripeEvent("checkout.session.expired", { payment_id: data[0].payment_id });
+        expect(result.outcome).toBe("processed");
+        expect((await row("payments", data[0].payment_id)).status).toBe("cancelled");
+        expect((await row("orders", data[0].order_id)).status).toBe("cancelled");
+        expect(await registrationStatuses(data[0].order_id)).toEqual(["cancelled"]);
+        expect(await seatsAvailable(eventId, sessionId)).toBe(2);
+    });
+
+    test("an old checkout session expiring doesn't cancel a payment that moved to a newer session", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+        await serviceRoleClient.from("payments").update({ stripe_checkout_session_id: "cs_test_new" }).eq("id", data[0].payment_id);
+
+        await stripeEvent("checkout.session.expired", { payment_id: data[0].payment_id, checkout_session_id: "cs_test_old" });
+        expect((await row("payments", data[0].payment_id)).status).toBe("pending");
+    });
+
+    test("a failed delayed payment marks the payment failed and releases the seat", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+        const result = await stripeEvent("checkout.session.async_payment_failed", { payment_id: data[0].payment_id });
+        expect(result.outcome).toBe("processed");
+        expect((await row("payments", data[0].payment_id)).status).toBe("failed");
+        expect(await registrationStatuses(data[0].order_id)).toEqual(["cancelled"]);
+    });
+
     test("a lapsed hold stops counting even without a webhook, and frees the last seat", async () => {
         // one participant seat
         const { eventId, sessionId } = await setupEvent({ max_seats: 2, volunteer_seat_count: 1 });
@@ -299,6 +422,33 @@ describe("orders and paid registration", () => {
         expect(await registrationStatuses(data[0].order_id)).toEqual(["cancelled"]);
     });
 
+    test("paying after the hold lapsed still registers the person", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Late", "late@example.com"), 30);
+        await stripeEvent("checkout.session.expired", { payment_id: data[0].payment_id });
+
+        await stripeEvent("checkout.session.completed", paid(data[0].payment_id));
+        expect((await row("orders", data[0].order_id)).status).toBe("paid");
+        expect(await registrationStatuses(data[0].order_id)).toEqual(["confirmed"]);
+    });
+
+    test("a late payment is still recorded when the person has registered for the session again", async () => {
+        const { sessionId } = await setupEvent();
+        const info = guest("Late", "late@example.com");
+        const first = await register(anonClient, [sessionId], info, 30);
+        await serviceRoleClient.from("payments").update({ expires_at: new Date(Date.now() - 1000).toISOString() }).eq("id", first.data[0].payment_id);
+        const second = await register(anonClient, [sessionId], info, 30);
+        expect(second.error).toBeNull();
+
+        const result = await stripeEvent("checkout.session.completed", paid(first.data[0].payment_id));
+        expect(result.outcome).toBe("processed");
+        expect((await row("payments", first.data[0].payment_id)).status).toBe("succeeded");
+        expect((await row("orders", first.data[0].order_id)).status).toBe("paid");
+        // the newer registration keeps the seat. the old one isn't brought back beside it
+        expect(await registrationStatuses(first.data[0].order_id)).toEqual(["cancelled"]);
+        expect(await registrationStatuses(second.data[0].order_id)).toEqual(["pending"]);
+    });
+
     test("retrying while a payment is in progress is blocked until it lapses", async () => {
         const { sessionId } = await setupEvent();
         const info = guest("Gwen", "gwen@example.com");
@@ -313,6 +463,64 @@ describe("orders and paid registration", () => {
         const afterLapse = await register(anonClient, [sessionId], info, 30);
         expect(afterLapse.error).toBeNull();
         expect(afterLapse.data[0].order_id).not.toBe(data[0].order_id);
+    });
+
+    test("participants can't cancel a pending or a paid registration online", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+
+        const pending = await anonClient.rpc("cancel_registration", { p_manage_token: data[0].manage_token });
+        expect(code(pending.error)).toBe("PAYMENT_PENDING");
+
+        await stripeEvent("checkout.session.completed", paid(data[0].payment_id));
+        const afterPaying = await anonClient.rpc("cancel_registration", { p_manage_token: data[0].manage_token });
+        expect(code(afterPaying.error)).toBe("PAID_REGISTRATION");
+    });
+
+    test("someone who already paid for the class isn't charged for another part", async () => {
+        const { eventId, sessionId } = await setupEvent();
+        const partTwo = await createSession(eventId, instructorId, { part: 2, start_at: futureIso(14), end_at: futureIso(14, 2) });
+        const info = guest("Pat", "pat@example.com");
+
+        const first = await register(anonClient, [sessionId], info, 30);
+        await stripeEvent("checkout.session.completed", paid(first.data[0].payment_id));
+
+        const second = await register(anonClient, [partTwo], info, 30);
+        expect(second.error).toBeNull();
+        expect(second.data[0]).toMatchObject({ status: "confirmed", order_id: null, payment_id: null });
+    });
+
+    test("begin_checkout gives simultaneous callers the same Checkout expiry", async () => {
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+
+        const [a, b] = await Promise.all([
+            serviceRoleClient.rpc("begin_checkout", { p_payment_id: data[0].payment_id }),
+            serviceRoleClient.rpc("begin_checkout", { p_payment_id: data[0].payment_id }),
+        ]);
+        expect(a.error).toBeNull();
+        expect(a.data.checkout_expires_at).toBe(b.data.checkout_expires_at);
+        // Stripe needs at least 30 minutes
+        expect(a.data.checkout_expires_at * 1000).toBeGreaterThan(Date.now() + 30 * 60 * 1000);
+        expect(a.data).toMatchObject({ status: "pending", amount: 3000, currency: "usd", customer_id: null });
+        expect(a.data.description).toContain(TEST_PREFIX);
+
+        const unknown = await serviceRoleClient.rpc("begin_checkout", { p_payment_id: crypto.randomUUID() });
+        expect(unknown.data).toBeNull();
+    });
+
+    test("begin_checkout offers the person's Stripe customer from an earlier payment", async () => {
+        const { eventId, sessionId } = await setupEvent();
+        const info = guest("Rhea", "returning@example.com");
+        const first = await register(anonClient, [sessionId], info, 30);
+        await stripeEvent("checkout.session.completed", paid(first.data[0].payment_id));
+
+        const otherEvent = await createEvent();
+        const otherSession = await createSession(otherEvent, instructorId);
+        const second = await register(anonClient, [otherSession], info, 30);
+        const { data } = await serviceRoleClient.rpc("begin_checkout", { p_payment_id: second.data[0].payment_id });
+        expect(data.customer_id).toBe("cus_test_123");
+        expect(eventId).not.toBe(otherEvent);
     });
 
     test("payment_status returns the payment with its class and registrations, and null when unknown", async () => {
