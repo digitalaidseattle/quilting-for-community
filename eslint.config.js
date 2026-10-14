@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'supabase/.temp/**',
       '**/*.test.ts',
       '**/*.test.tsx',
       // From template

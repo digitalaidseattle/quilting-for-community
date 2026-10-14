@@ -37,9 +37,8 @@ export type EventSession = Entity & {
 };
 
 export type RegistrationType = 'participant' | 'volunteer';
-export type RegistrationStatus = 'confirmed' | 'cancelled';
+export type RegistrationStatus = 'pending' | 'confirmed' | 'cancelled';
 
-/** One person's registration for one session (see migration 20260901120000_event_registrations.sql). */
 export type EventRegistration = Entity & {
     session_id: string;
     profile_id: string;
@@ -47,4 +46,65 @@ export type EventRegistration = Entity & {
     status: RegistrationStatus;
     manage_token: string;
     waiver_accepted_at: string | null;
+    /** The order this registration was bought with. Null when nothing was charged. */
+    order_id: string | null;
+};
+
+export type OrderStatus = 'pending' | 'paid' | 'cancelled' | 'refunded';
+
+export type Order = Entity & {
+    profile_id: string;
+    status: OrderStatus;
+    /** Sum of the items. */
+    amount: number;
+    payment_date: string | null;
+    request_id: string | null;
+};
+
+export type OrderItem = Entity & {
+    order_id: string;
+    event_id: string;
+    amount: number;
+};
+
+export type PaymentType = 'cash' | 'credit' | 'stripe';
+export type PaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded' | 'cancelled';
+
+export type Payment = Entity & {
+    order_id: string;
+    type: PaymentType;
+    status: PaymentStatus;
+    amount: number;
+    currency: string;
+    provider_customer_id: string | null;
+    stripe_payment_id: string | null;
+    stripe_checkout_session_id: string | null;
+    /** Staff's note for a payment taken in person (e.g. the Clover receipt number). */
+    reference: string | null;
+    paid_at: string | null;
+    expires_at: string | null;
+};
+
+/** What happened to a payment at one moment. Append-only, written by the database. */
+export type PaymentHistory = Entity & {
+    payment_id: string;
+    /** 'initiated', 'checkout_started', a status the payment moved to, or 'refund'. */
+    event: string;
+    from_status: PaymentStatus | null;
+    to_status: PaymentStatus | null;
+    type: PaymentType;
+    processor_id: string | null;
+    amount: number;
+    payment_date: string;
+    /** A person's email, 'stripe-webhook', 'hold-expiry', or a database role. */
+    actor: string;
+    stripe_event_id: string | null;
+};
+
+export type Refund = Entity & {
+    payment_id: string;
+    amount: number;
+    stripe_refund_id: string;
+    status: string;
+    reason: string | null;
 };
