@@ -38,6 +38,17 @@ export function sessionsForCancelledEvent(
     ));
 }
 
+/** Embedded sessions come back in insert order; keep them chronological for the edit UI. */
+export function withSortedSessions(event: Event): Event {
+    if (!event.event_sessions) return event;
+    return {
+        ...event,
+        event_sessions: [...event.event_sessions].sort((a, b) =>
+            a.start_at.localeCompare(b.start_at)
+        ),
+    };
+}
+
 // Handles both events and their sessions
 export class EventsService {
     private static instance: EventsService;
@@ -55,11 +66,14 @@ export class EventsService {
     ) { }
 
     find(query: QueryModel, opts?: DataAccessOptions<Event>): Promise<PageInfo<Event>> {
-        return this.events.find(query, opts);
+        return this.events.find(query, opts).then((page) => ({
+            ...page,
+            rows: page.rows.map(withSortedSessions),
+        }));
     }
 
     getById(id: Identifier): Promise<Event | null> {
-        return this.events.getById(id);
+        return this.events.getById(id).then((event) => event ? withSortedSessions(event) : event);
     }
 
     private async syncSessions(eventId: string, eventStatus: EventStatus, eventSessions: EventSession[]): Promise<void> {

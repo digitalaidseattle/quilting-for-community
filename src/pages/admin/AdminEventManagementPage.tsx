@@ -21,10 +21,11 @@ import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useSt
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
-import { EventsService } from "../../services/events/EventsService";
+import { EventsService, withSortedSessions } from "../../services/events/EventsService";
 import { EventSessionsService } from "../../services/events/EventSessionsService";
 import { Event, EventSession } from "../../services/events/types";
 import { loadStoredTimezone, storeTimezone } from "../../utils/date-format";
+import { escapeIlikePattern } from "../../utils/ilike";
 import { CalendarRange, EventCalendar } from "./EventCalendar";
 
 /** True when the storage object lives under this event's folder. */
@@ -37,6 +38,12 @@ const initialCalendarRange = (): CalendarRange => ({
     start: dayjs().startOf('month').subtract(7, 'day').toDate(),
     end: dayjs().endOf('month').add(7, 'day').toDate(),
 });
+
+function searchFilterItems(search: string): FilterItem[] {
+    const term = search.trim();
+    if (!term) return [];
+    return [{ field: 'search_key', operator: 'contains', value: escapeIlikePattern(term) }];
+}
 
 export const AdminEventManagementPage = () => {
     const service = EventsService.getInstance();
@@ -62,41 +69,30 @@ export const AdminEventManagementPage = () => {
         storeTimezone(next);
     }
 
-    function searchFilterItems(): FilterItem[] {
-        const term = search.trim();
-        if (!term) return [];
-        return [{ field: 'search_key', operator: 'contains', value: term }];
-    }
-
     function handleSearchChange(value: string) {
         setSearch(value);
         setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
     }
 
-    useEffect(() => { fetchPage(); }, [paginationModel, sortModel, refresh, version, search]);
-
     useEffect(() => {
-        if (tab === 0) {
-            fetchCalendarEvents();
-        }
-    }, [tab, calendarRange, refresh, version, search]);
-
-    function fetchPage() {
         const queryModel = {
             page: paginationModel.page,
             pageSize: paginationModel.pageSize,
             sortField: sortModel.length === 0 ? 'name' : sortModel[0].field,
             sortDirection: sortModel.length === 0 ? 'asc' : sortModel[0].sort,
-            filterModel: { items: searchFilterItems() },
+            filterModel: { items: searchFilterItems(search) },
         } as QueryModel;
 
         setLoading(true);
         service.find(queryModel, { select: '*' })
             .then(setPageInfo)
             .finally(() => setLoading(false));
-    }
+    }, [paginationModel, sortModel, refresh, version, search, service, setLoading]);
 
-    function fetchCalendarEvents() {
+    useEffect(() => {
+        if (tab !== 0) {
+            return;
+        }
         const queryModel = {
             page: 0,
             pageSize: 200,
@@ -106,7 +102,7 @@ export const AdminEventManagementPage = () => {
                 items: [
                     { field: 'event_sessions.start_at', operator: '>', value: calendarRange.start.toISOString() },
                     { field: 'event_sessions.start_at', operator: '<', value: calendarRange.end.toISOString() },
-                    ...searchFilterItems(),
+                    ...searchFilterItems(search),
                 ],
             },
         } as QueryModel;
@@ -117,7 +113,7 @@ export const AdminEventManagementPage = () => {
         service.find(queryModel, { select: '*, event_sessions!inner(*)' })
             .then((page) => setCalendarEvents(page.rows))
             .finally(() => setLoading(false));
-    }
+    }, [tab, calendarRange, refresh, version, search, service, setLoading]);
 
     function refetch() {
         setVersion((v) => v + 1);
@@ -136,7 +132,7 @@ export const AdminEventManagementPage = () => {
     }
 
     async function handleSessionTimesChange(session: EventSession, startAt: string, endAt: string) {
-        setCalendarEvents((prev) => prev.map((event) => ({
+        setCalendarEvents((prev) => prev.map((event) => withSortedSessions({
             ...event,
             event_sessions: (event.event_sessions ?? []).map((s) =>
                 s.id === session.id ? { ...s, start_at: startAt, end_at: endAt } : s

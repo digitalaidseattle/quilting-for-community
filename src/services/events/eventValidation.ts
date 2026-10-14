@@ -1,6 +1,9 @@
 import { FieldErrors, Resolver } from "react-hook-form";
 import { Event } from "./types";
 
+export const MIN_DURATION_MINUTES = 1;
+export const MAX_DURATION_MINUTES = 24 * 60;
+
 export type EventFieldErrors = Partial<Record<
     'name' | 'duration' | 'max_seats' | 'volunteer_seat_count' | 'price' | 'sessions',
     string
@@ -22,8 +25,10 @@ export function validateEvent(event: Event): EventFieldErrors {
     // NaN usually comes from an emptied number input.
     if (Number.isNaN(event.duration)) {
         errors.duration = 'Duration must be a valid number';
-    } else if (!isMissingNumber(event.duration) && event.duration < 1) {
+    } else if (!isMissingNumber(event.duration) && event.duration < MIN_DURATION_MINUTES) {
         errors.duration = 'Duration must be at least 1 minute';
+    } else if (event.duration > MAX_DURATION_MINUTES) {
+        errors.duration = 'Duration cannot exceed 24 hours (1440 minutes)';
     }
 
     if (Number.isNaN(event.max_seats)) {

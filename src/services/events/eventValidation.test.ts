@@ -1,5 +1,5 @@
 import { EventsDao } from "./EventsDao";
-import { validateEvent } from "./eventValidation";
+import { MAX_DURATION_MINUTES, validateEvent } from "./eventValidation";
 import { Event, EventSession } from "./types";
 
 function baseEvent(overrides: Partial<Event> = {}): Event {
@@ -72,6 +72,16 @@ describe("validateEvent", () => {
         expect(validateEvent(baseEvent({
             event_sessions: [session({ status: 'draft' })],
         }))).toEqual({});
+    });
+
+    test("accepts durations up to 24 hours", () => {
+        expect(validateEvent(baseEvent({ duration: 1 })).duration).toBeUndefined();
+        expect(validateEvent(baseEvent({ duration: MAX_DURATION_MINUTES })).duration).toBeUndefined();
+    });
+
+    test("rejects durations over 24 hours", () => {
+        expect(validateEvent(baseEvent({ duration: MAX_DURATION_MINUTES + 1 })).duration)
+            .toBe("Duration cannot exceed 24 hours (1440 minutes)");
     });
 
     test("rejects an event with NaN duration", () => {
