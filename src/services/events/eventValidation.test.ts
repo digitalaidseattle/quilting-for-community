@@ -1,26 +1,104 @@
-import { Event } from "./types";
+import { EventsDao } from "./EventsDao";
 import { MAX_DURATION_MINUTES, validateEvent } from "./eventValidation";
+import { Event, EventSession } from "./types";
 
-function event(overrides: Partial<Event> = {}): Event {
+function baseEvent(overrides: Partial<Event> = {}): Event {
     return {
-        name: "Intro",
-        duration: 60,
-        max_seats: 10,
-        volunteer_seat_count: 2,
-        price: 0,
-        template: true,
+        ...EventsDao.empty(),
+        name: 'Intro to Quilting',
+        status: 'draft',
+        event_sessions: [],
         ...overrides,
-    } as Event;
+    };
 }
 
-describe("validateEvent duration", () => {
+function session(overrides: Partial<EventSession> = {}): EventSession {
+    return {
+        id: 'session-1',
+        event_id: 'event-1',
+        start_at: '2026-09-01T17:00:00.000Z',
+        end_at: '2026-09-01T19:00:00.000Z',
+        max_seats: null,
+        status: 'draft',
+        part: 1,
+        instructor_id: null,
+        ...overrides,
+    };
+}
+
+describe("validateEvent", () => {
+    test("requires only a title for a draft event", () => {
+        expect(validateEvent(baseEvent({ name: 'New class' }))).toEqual({});
+    });
+
+    test("rejects an empty title", () => {
+        expect(validateEvent(baseEvent({ name: '   ' }))).toEqual({
+            name: 'Title is required',
+        });
+    });
+
+    test("requires at least one session before publishing a non-template event", () => {
+        expect(validateEvent(baseEvent({ status: 'published' }))).toEqual({
+            sessions: 'Add at least one session before publishing',
+        });
+    });
+
+    test("allows a published template without sessions", () => {
+        expect(validateEvent(baseEvent({
+            template: true,
+            status: 'published',
+            event_sessions: [],
+        }))).toEqual({});
+    });
+
+    test("requires an instructor before publishing a session", () => {
+        expect(validateEvent(baseEvent({
+            event_sessions: [session({ status: 'published' })],
+        }))).toEqual({
+            sessions: 'Assign an instructor before publishing a session',
+        });
+    });
+
+    test("allows a published session when an instructor is assigned", () => {
+        expect(validateEvent(baseEvent({
+            status: 'published',
+            event_sessions: [
+                session({ status: 'published', instructor_id: 'instructor-1' }),
+            ],
+        }))).toEqual({});
+    });
+
+    test("does not require an instructor on draft sessions", () => {
+        expect(validateEvent(baseEvent({
+            event_sessions: [session({ status: 'draft' })],
+        }))).toEqual({});
+    });
+
     test("accepts durations up to 24 hours", () => {
-        expect(validateEvent(event({ duration: 1 })).duration).toBeUndefined();
-        expect(validateEvent(event({ duration: MAX_DURATION_MINUTES })).duration).toBeUndefined();
+        expect(validateEvent(baseEvent({ duration: 1 })).duration).toBeUndefined();
+        expect(validateEvent(baseEvent({ duration: MAX_DURATION_MINUTES })).duration).toBeUndefined();
     });
 
     test("rejects durations over 24 hours", () => {
-        expect(validateEvent(event({ duration: MAX_DURATION_MINUTES + 1 })).duration)
+        expect(validateEvent(baseEvent({ duration: MAX_DURATION_MINUTES + 1 })).duration)
             .toBe("Duration cannot exceed 24 hours (1440 minutes)");
+    });
+
+    test("rejects an event with NaN duration", () => {
+        expect(validateEvent(baseEvent({ duration: NaN }))).toEqual({
+            duration: 'Duration must be a valid number',
+        });
+    });
+
+    test("rejects an event with NaN capacity, volunteer seats, or price", () => {
+        expect(validateEvent(baseEvent({
+            max_seats: NaN,
+            volunteer_seat_count: NaN,
+            price: NaN,
+        }))).toEqual({
+            max_seats: 'Capacity must be a valid number',
+            volunteer_seat_count: 'Volunteer seats must be a valid number',
+            price: 'Price must be a valid number',
+        });
     });
 });

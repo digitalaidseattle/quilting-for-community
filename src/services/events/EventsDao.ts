@@ -2,7 +2,7 @@ import { SupabaseConfiguration, SupabaseDAO } from "@digitalaidseattle/supabase"
 import { Event } from "./types";
 
 const EVENT_SELECT =
-    '*, instructor:profiles!instructor_id(id, name, email, first_name, last_name), event_sessions(*)';
+    '*, event_sessions(*, instructor:profiles!instructor_id(id, name, email, first_name, last_name))';
 
 export class EventsDao extends SupabaseDAO<Event> {
     private static instance: EventsDao;
@@ -13,7 +13,6 @@ export class EventsDao extends SupabaseDAO<Event> {
             description: '',
             notes: '',
             category: '',
-            instructor_id: null,
             duration: 60,
             max_seats: 10,
             volunteer_seat_count: 2,

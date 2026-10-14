@@ -4,11 +4,38 @@ import { EventsEntityService } from "./EventsEntityService";
 import {
     Event,
     EventSession,
+    EventStatus,
 } from "./types";
 
 /** Builds the denormalized search blob used for generalized event filters. */
 export function buildEventSearchKey(event: Pick<Event, 'name' | 'description' | 'category'>): string {
     return `${event.name ?? ''}@${event.description ?? ''}@${event.category ?? ''}`;
+}
+
+/**
+ * Renumbers session parts so they stay contiguous from 1 (e.g. deleting all
+ * of part 2 of 3 turns the old part 3 into part 2). Also sorts by part, then
+ * start time, which is the display order everywhere.
+ */
+export function normalizeSessionParts(sessions: EventSession[]): EventSession[] {
+    const parts = [...new Set(sessions.map((session) => session.part))].sort((a, b) => a - b);
+    const renumbered = new Map(parts.map((part, index) => [part, index + 1]));
+    return sessions
+        .map((session) => ({ ...session, part: renumbered.get(session.part) as number }))
+        .sort((a, b) => a.part - b.part || a.start_at.localeCompare(b.start_at));
+}
+
+/** A cancelled event cannot have live sessions. Force them to match on save. */
+export function sessionsForCancelledEvent(
+    eventStatus: EventStatus,
+    sessions: EventSession[],
+): EventSession[] {
+    if (eventStatus !== 'cancelled') {
+        return sessions;
+    }
+    return sessions.map((session) => (
+        session.status === 'cancelled' ? session : { ...session, status: 'cancelled' }
+    ));
 }
 
 /** Embedded sessions come back in insert order; keep them chronological for the edit UI. */
@@ -49,9 +76,27 @@ export class EventsService {
         return this.events.getById(id).then((event) => event ? withSortedSessions(event) : event);
     }
 
+    private async syncSessions(eventId: string, eventStatus: EventStatus, eventSessions: EventSession[]): Promise<void> {
+        const normalized = normalizeSessionParts(
+            sessionsForCancelledEvent(eventStatus, eventSessions),
+        );
+        const existing = await this.sessions.getByEventId(eventId);
+        const keptIds = new Set(normalized.map((session) => session.id));
+
+        await Promise.all([
+            ...existing
+                .filter((session) => !keptIds.has(session.id))
+                .map((session) => this.sessions.delete(session.id as string)),
+            ...normalized.map(({ instructor: _instructor, ...session }) => this.sessions.upsert({
+                ...session,
+                event_id: eventId,
+            } as EventSession)),
+        ]);
+    }
+
     // Inserts or updates the event and its sessions
     async save(event: Event): Promise<Event> {
-        const { event_sessions, instructor: _instructor, ...fields } = event;
+        const { event_sessions, ...fields } = event;
         const payload = {
             ...fields,
             search_key: buildEventSearchKey(fields),
@@ -60,22 +105,38 @@ export class EventsService {
             ? await this.events.update(event.id, payload)
             : await this.events.insert(payload as Event);
 
-        if (event_sessions) {
-            const existing = event.id ? await this.sessions.getByEventId(saved.id as string) : [];
-            const keptIds = new Set(event_sessions.map((session) => session.id));
+        const eventId = saved.id as string;
 
-            await Promise.all([
-                ...existing
-                    .filter((session) => !keptIds.has(session.id))
-                    .map((session) => this.sessions.delete(session.id as string)),
-                ...event_sessions.map((session) => this.sessions.upsert({
-                    ...session,
-                    event_id: saved.id as string,
-                })),
-            ]);
+        if (event_sessions) {
+            await this.syncSessions(eventId, fields.status, event_sessions);
+        } else if (fields.status === 'cancelled' && event.id) {
+            const existing = await this.sessions.getByEventId(eventId);
+            await Promise.all(
+                existing
+                    .filter((session) => session.status !== 'cancelled')
+                    .map((session) => this.sessions.update(session.id as string, { status: 'cancelled' })),
+            );
         }
 
         return await this.getById(saved.id as string) as Event;
+    }
+
+    async saveSession(event: Event, session: EventSession): Promise<Event> {
+        const eventSessions = normalizeSessionParts([
+            ...(event.event_sessions ?? []).filter((existing) => existing.id !== session.id),
+            session,
+        ]);
+
+        if (!event.id) {
+            return this.save({
+                ...event,
+                event_sessions: eventSessions,
+            });
+        }
+
+        const savedEvent = await this.getById(event.id as string);
+        await this.syncSessions(event.id as string, savedEvent?.status ?? event.status, eventSessions);
+        return await this.getById(event.id as string) as Event;
     }
 
     async delete(id: Identifier): Promise<void> {
@@ -89,10 +150,9 @@ export class EventsService {
         }
         const {
             id: _id,
-            created_at,
-            updated_at,
+            created_at: _createdAt,
+            updated_at: _updatedAt,
             event_sessions,
-            instructor: _instructor,
             ...rest
         } = source;
         return this.save({
@@ -119,11 +179,12 @@ export class EventsService {
 
         return {
             event_id: event.id as string,
-            description: overrides.description ?? '',
             start_at: start,
             end_at: end,
             max_seats: overrides.max_seats ?? null,
             status: overrides.status ?? 'draft',
+            part: overrides.part ?? 1,
+            instructor_id: overrides.instructor_id ?? null,
         } as EventSession;
     }
 }
