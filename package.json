@@ -11,7 +11,8 @@
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "test:unit": "vitest --root src/",
-    "test:integration": "vitest --root test/integration"
+    "test:integration": "vitest --root test/integration",
+    "test:functions": "vitest --root supabase/functions"
   },
   "dependencies": {
     "@digitalaidseattle/core": "^1.0.22",
@@ -37,6 +38,7 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "jsdom": "^29.1.1",
+    "stripe": "^22.6.2",
     "supabase": "^2.109.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
