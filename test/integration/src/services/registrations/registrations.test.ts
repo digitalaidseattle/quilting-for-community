@@ -229,7 +229,7 @@ describe("register_for_sessions (guest)", () => {
             waiver_accepted: true,
         });
 
-        const otherSession = await createSession(eventId, instructorId, { part: 2, start_at: futureIso(14), end_at: futureIso(14, 2) });
+        const otherSession = await createSession(await createEvent(), instructorId);
         const second = await register(anonClient, [otherSession], guest("Gwen G", "gwen@example.com"));
         expect(second.error).toBeNull();
 
@@ -271,10 +271,11 @@ describe("register_for_sessions (guest)", () => {
         await serviceRoleClient.from("profiles").delete().eq("phone", "555-0199").is("auth_id", null);
     });
 
-    test("rejects duplicate session and duplicate part registrations", async () => {
+    test("rejects a second registration for the same class", async () => {
         await setup();
         const info = guest("Gwen", "gwen@example.com");
         const altPartOne = await createSession(eventId, instructorId, { start_at: futureIso(8), end_at: futureIso(8, 2) });
+        const partTwo = await createSession(eventId, instructorId, { part: 2, start_at: futureIso(14), end_at: futureIso(14, 2) });
 
         expect((await register(anonClient, [sessionId], info)).error).toBeNull();
 
@@ -282,7 +283,10 @@ describe("register_for_sessions (guest)", () => {
         expect(code(duplicate.error)).toBe("ALREADY_REGISTERED");
 
         const samePart = await register(anonClient, [altPartOne], info);
-        expect(code(samePart.error)).toBe("PART_ALREADY_REGISTERED");
+        expect(code(samePart.error)).toBe("ALREADY_REGISTERED");
+
+        const laterPart = await register(anonClient, [partTwo], info);
+        expect(code(laterPart.error)).toBe("ALREADY_REGISTERED");
     });
 
     test("multi-part: one session per part in a single call, atomically", async () => {
@@ -358,6 +362,23 @@ describe("cancel_registration and registration_by_token", () => {
         // can register again after cancelling
         const again = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"));
         expect(again.error).toBeNull();
+    });
+
+    test("cancelling one part cancels every part of the class", async () => {
+        const instructorId = await createInstructorProfile();
+        const eventId = await createEvent();
+        const partOne = await createSession(eventId, instructorId);
+        const partTwo = await createSession(eventId, instructorId, { part: 2, start_at: futureIso(14), end_at: futureIso(14, 2) });
+
+        const { data } = await register(anonClient, [partOne, partTwo], guest("Gwen", "gwen@example.com"));
+        const cancelled = await anonClient.rpc("cancel_registration", { p_manage_token: data[1].manage_token });
+        expect(cancelled.error).toBeNull();
+
+        const { data: rows } = await serviceRoleClient
+            .from("event_registrations")
+            .select("status")
+            .in("id", data.map((r: { id: string }) => r.id));
+        expect(rows!.map((r) => r.status)).toEqual(["cancelled", "cancelled"]);
     });
 
     test("cannot cancel within 48 hours of the session", async () => {
