@@ -251,7 +251,6 @@ declare
   v_event_ids uuid[];
   v_amount numeric;
   v_amount_cents int;
-  v_already_paid boolean;
   v_order public.orders%rowtype;
   v_status text;
   v_registration public.event_registrations%rowtype;
@@ -287,6 +286,14 @@ begin
   if cardinality(v_event_ids) > 1 then
     raise exception 'Register for one class at a time.'
       using errcode = 'P0001', hint = 'SESSION_EVENT_MISMATCH';
+  end if;
+
+  -- Parts are optional, but at most one session of each.
+  if (
+    select count(distinct s.part) from public.event_sessions s where s.id = any(v_session_ids)
+  ) < cardinality(v_session_ids) then
+    raise exception 'Choose only one session for each part.'
+      using errcode = 'P0001', hint = 'PART_ALREADY_REGISTERED';
   end if;
 
   perform public.expire_stale_payments();
@@ -387,18 +394,25 @@ begin
     end if;
   end if;
 
-  -- ---- an unpaid hold from an earlier attempt at this class ------------------
-  -- Finish that payment or let it lapse. This looks at the whole class, not
-  -- one part: a second order for another part would charge for the class twice.
-  select r.order_id into v_pending_order_id
+  -- ---- an earlier registration for this class ------------------------------
+  -- Every part a person wants is chosen in one registration, so the class is
+  -- paid for once. Parts can't be added later.
+  select r.order_id, r.status into v_pending_order_id, v_status
   from public.event_registrations r
   join public.event_sessions s on s.id = r.session_id
   where r.profile_id = v_profile.id
-    and r.status = 'pending'
+    and r.status in ('pending', 'confirmed')
     and s.event_id = v_event.id
+  order by (r.status = 'pending') desc
   limit 1;
 
-  if found then
+  if v_status = 'confirmed' then
+    raise exception 'You''re already registered for this class.'
+      using errcode = 'P0001', hint = 'ALREADY_REGISTERED';
+  end if;
+
+  -- An unpaid hold: finish that payment or let it lapse.
+  if v_status = 'pending' then
     -- only a signed-in user gets the payment id back to resume. for a guest it
     -- would let anyone who knows their email look up their registration
     raise exception 'You already have a payment in progress for this class. Finish it, or try again after it expires in about 30 minutes.'
@@ -410,29 +424,14 @@ begin
   end if;
 
   -- ---- how much ------------------------------------------------------------
-  -- A person who already paid for this class isn't charged again for another part.
-  select exists (
-    select 1
-    from public.orders o
-    join public.order_items i on i.order_id = o.id
-    where o.profile_id = v_profile.id
-      and o.status = 'paid'
-      and i.event_id = v_event.id
-      and exists (
-        select 1 from public.event_registrations r
-        where r.order_id = o.id and r.status = 'confirmed'
-      )
-  ) into v_already_paid;
-
   v_amount := round(coalesce(p_amount, 0), 2);
 
-  if not v_already_paid
-     and (v_amount < v_event.price_min or v_amount > v_event.price_max) then
+  if v_amount < v_event.price_min or v_amount > v_event.price_max then
     raise exception 'Please choose an amount between $% and $%.', v_event.price_min, v_event.price_max
       using errcode = 'P0001', hint = 'AMOUNT_OUT_OF_RANGE';
   end if;
 
-  if not v_already_paid and v_amount > 0 then
+  if v_amount > 0 then
     v_amount_cents := (v_amount * 100)::int;
 
     insert into public.orders (profile_id, amount, request_id)
@@ -474,30 +473,6 @@ begin
         using errcode = 'P0001', hint = 'SESSION_UNAVAILABLE';
     end if;
 
-    if exists (
-      select 1 from public.event_registrations r
-      where r.session_id = v_session.id
-        and r.profile_id = v_profile.id
-        and r.status in ('confirmed', 'pending')
-    ) then
-      raise exception 'You are already registered for this session.'
-        using errcode = 'P0001', hint = 'ALREADY_REGISTERED';
-    end if;
-
-    if exists (
-      select 1
-      from public.event_registrations r
-      join public.event_sessions other on other.id = r.session_id
-      where r.profile_id = v_profile.id
-        and r.status in ('confirmed', 'pending')
-        and other.event_id = v_session.event_id
-        and other.part = v_session.part
-        and other.id <> v_session.id
-    ) then
-      raise exception 'You are already registered for another session of this part.'
-        using errcode = 'P0001', hint = 'PART_ALREADY_REGISTERED';
-    end if;
-
     if public.session_seats_available(v_session.id) <= 0 then
       raise exception 'This session is full.'
         using errcode = 'P0001', hint = 'SESSION_FULL';
@@ -522,11 +497,12 @@ revoke execute on function public.register_for_sessions(uuid[], jsonb, boolean, 
 grant execute on function public.register_for_sessions(uuid[], jsonb, boolean, numeric, uuid) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- RPC: cancel_registration. Unchanged except participants can't cancel a
--- registration that's awaiting payment (its seat is released when the hold
--- lapses or they back out of Checkout, see cancel_payment) or one whose
--- order has been paid (refunds are handled by staff for now). Admins can still
--- cancel.
+-- RPC: cancel_registration. Cancels the person's whole registration for the
+-- class, every part of it, since parts can't be added back later. Participants
+-- can't cancel a registration that's awaiting payment (its seat is released
+-- when the hold lapses or they back out of Checkout, see cancel_payment) or one
+-- whose order has been paid (refunds are handled by staff for now). Admins can
+-- still cancel.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.cancel_registration(
@@ -543,6 +519,7 @@ declare
   v_is_admin boolean := coalesce(public.is_admin(), false);
   v_profile_id uuid;
   v_start_at timestamptz;
+  v_class_registration_ids uuid[];
   v_paid boolean;
 begin
   if p_manage_token is not null then
@@ -592,16 +569,24 @@ begin
       using errcode = 'P0001', hint = 'PAID_REGISTRATION';
   end if;
 
-  select start_at into v_start_at from public.event_sessions where id = v_registration.session_id;
+  -- the person's registrations for this class, this one included
+  select array_agg(r.id), min(s.start_at) into v_class_registration_ids, v_start_at
+  from public.event_registrations r
+  join public.event_sessions s on s.id = r.session_id
+  where r.profile_id = v_registration.profile_id
+    and r.status in ('confirmed', 'pending')
+    and s.event_id = (select event_id from public.event_sessions where id = v_registration.session_id);
+
   if not v_is_admin and v_start_at < now() + interval '48 hours' then
-    raise exception 'Registrations can only be cancelled up to 48 hours before the session. Please contact Quilting for Community.'
+    raise exception 'Registrations can only be cancelled up to 48 hours before your first session. Please contact Quilting for Community.'
       using errcode = 'P0001', hint = 'CANCELLATION_WINDOW_CLOSED';
   end if;
 
   update public.event_registrations
   set status = 'cancelled'
-  where id = v_registration.id
-  returning * into v_registration;
+  where id = any(v_class_registration_ids);
+
+  select * into v_registration from public.event_registrations where id = v_registration.id;
 
   return public.registration_details(v_registration);
 end;
