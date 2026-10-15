@@ -476,7 +476,7 @@ describe("orders and paid registration", () => {
         expect(code(afterPaying.error)).toBe("PAID_REGISTRATION");
     });
 
-    test("someone who already paid for the class isn't charged for another part", async () => {
+    test("someone who already paid for the class can't add another part later", async () => {
         const { eventId, sessionId } = await setupEvent();
         const partTwo = await createSession(eventId, instructorId, { part: 2, start_at: futureIso(14), end_at: futureIso(14, 2) });
         const info = guest("Pat", "pat@example.com");
@@ -485,8 +485,7 @@ describe("orders and paid registration", () => {
         await stripeEvent("checkout.session.completed", paid(first.data[0].payment_id));
 
         const second = await register(anonClient, [partTwo], info, 30);
-        expect(second.error).toBeNull();
-        expect(second.data[0]).toMatchObject({ status: "confirmed", order_id: null, payment_id: null });
+        expect(code(second.error)).toBe("ALREADY_REGISTERED");
     });
 
     test("begin_checkout gives simultaneous callers the same Checkout expiry", async () => {
