@@ -6,8 +6,7 @@
 //
 // The order and its payment row (amount, what was bought) were created by
 // register_for_sessions. This function only turns the payment into a Checkout
-// session, so the amount can't be changed from the browser. Knowing the
-// payment id is the credential, the same way a manage token is.
+// session, so the amount can't be changed from the browser.
 //
 // Double clicks: an open Checkout is reused. When a new one is needed, the
 // database hands simultaneous callers the same expiry (begin_checkout), so
@@ -31,16 +30,12 @@ type CheckoutInfo = {
     id: string;
     order_id: string;
     status: "pending" | "succeeded" | "failed" | "refunded" | "cancelled";
-    /** cents */
     amount: number;
     currency: string;
     stripe_checkout_session_id: string | null;
-    /** Unix seconds. Checkout closes 5 minutes before the seat hold does. */
     checkout_expires_at: number;
-    /** What the order is for, e.g. the class name. */
     description: string | null;
     email: string | null;
-    /** The person's Stripe customer from an earlier payment, if any. */
     customer_id: string | null;
 };
 
@@ -56,8 +51,6 @@ function createSession(payment: CheckoutInfo, returnUrl: string, useKnownCustome
 
     return stripe.checkout.sessions.create({
         mode: "payment",
-        // Cards only (Apple Pay / Google Pay ride on card). Methods that
-        // settle days later, like bank debits, would outlive the seat hold.
         payment_method_types: ["card"],
         line_items: [{
             quantity: 1,
@@ -75,8 +68,7 @@ function createSession(payment: CheckoutInfo, returnUrl: string, useKnownCustome
         success_url: withParam(returnUrl, "checkout=success"),
         cancel_url: withParam(returnUrl, "checkout=cancelled"),
     }, {
-        // Same payment, same session being replaced, same expiry: the same
-        // request. Stripe then returns the first session instead of a second.
+        // Same payment, same session being replaced, same expiry: the same request. Stripe then returns the first session instead of a second.
         idempotencyKey: [
             "checkout",
             payment.id,

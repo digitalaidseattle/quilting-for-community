@@ -38,8 +38,7 @@ jobs:
         with:
           version: latest
 
-      # Applies every migration to an empty Postgres, so a migration that only
-      # works against an already-migrated database fails here instead of in QA.
+      # Applies every migration to an empty Postgres, so a migration that only works against an already-migrated database fails here instead of in QA.
       - name: Apply every migration from scratch
         run: supabase db start
 
@@ -73,8 +72,7 @@ jobs:
       - name: Deploy database migrations
         run: supabase db push
 
-      # Needs STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and ALLOWED_RETURN_URLS set
-      # on the project first (`supabase secrets set`, see README).
+      # Needs STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and ALLOWED_RETURN_URLS set on the project first (`supabase secrets set`, see README).
       - name: Deploy edge functions
         run: supabase functions deploy
 
@@ -105,7 +103,6 @@ jobs:
       - name: Deploy database migrations
         run: supabase db push
 
-      # Needs STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and ALLOWED_RETURN_URLS set
-      # on the project first (`supabase secrets set`, see README).
+      # Needs STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and ALLOWED_RETURN_URLS set on the project first (`supabase secrets set`, see README).
       - name: Deploy edge functions
         run: supabase functions deploy
