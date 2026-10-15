@@ -36,10 +36,10 @@ export function post(body: unknown): Request {
  */
 export function fakeQuery(result: { data: unknown; error: unknown }) {
     const query: Record<string, unknown> = {};
-    for (const method of ["select", "update", "eq", "or"]) {
+    for (const method of ["select", "update", "eq", "is"]) {
         query[method] = vi.fn(() => query);
     }
     query.maybeSingle = vi.fn(async () => result);
     query.then = (resolve: (value: typeof result) => unknown) => resolve(result);
-    return query as Record<"select" | "update" | "eq" | "or" | "maybeSingle", ReturnType<typeof vi.fn>>;
+    return query as Record<"select" | "update" | "eq" | "is" | "maybeSingle", ReturnType<typeof vi.fn>>;
 }
