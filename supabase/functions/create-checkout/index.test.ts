@@ -31,10 +31,16 @@ function paymentRow(row: { status: string; stripe_checkout_session_id: string | 
     admin.from.mockReturnValueOnce(fakeQuery({ data: row, error: null }));
 }
 
-/** Whether saving the new Checkout session on the payment wins. */
-function claim(won: boolean) {
+/**
+ * Whether saving the new Checkout session on the payment wins. When it doesn't,
+ * `current` is the session the payment has by then.
+ */
+function claim(won: boolean, current: string | null = null) {
     const query = fakeQuery({ data: won ? [{ id: PAYMENT_ID }] : [], error: null });
     admin.from.mockReturnValueOnce(query);
+    if (!won) {
+        admin.from.mockReturnValueOnce(fakeQuery({ data: { stripe_checkout_session_id: current }, error: null }));
+    }
     return query;
 }
 
@@ -149,7 +155,7 @@ describe("create-checkout", () => {
         // saved only if the payment is still pending and has no other session
         expect(saved.update).toHaveBeenCalledWith({ stripe_checkout_session_id: "cs_new" });
         expect(saved.eq).toHaveBeenCalledWith("status", "pending");
-        expect(saved.or).toHaveBeenCalledWith("stripe_checkout_session_id.eq.cs_new,stripe_checkout_session_id.is.null");
+        expect(saved.is).toHaveBeenCalledWith("stripe_checkout_session_id", null);
     });
 
     test("an expired Checkout is replaced, reusing the person's Stripe customer", async () => {
@@ -169,7 +175,7 @@ describe("create-checkout", () => {
         expect(params.customer).toBe("cus_123");
         expect(params.customer_email).toBeUndefined();
         expect(options.idempotencyKey).toBe(`checkout:${PAYMENT_ID}:cs_expired:1800000000:customer`);
-        expect(saved.or).toHaveBeenCalledWith("stripe_checkout_session_id.eq.cs_new,stripe_checkout_session_id.eq.cs_expired");
+        expect(saved.eq).toHaveBeenCalledWith("stripe_checkout_session_id", "cs_expired");
     });
 
     test("a saved customer that no longer exists in Stripe falls back to the person's email", async () => {
@@ -204,12 +210,24 @@ describe("create-checkout", () => {
         admin.rpc.mockResolvedValue({ data: checkoutInfo, error: null });
         stripe.checkout.sessions.create.mockResolvedValue({ id: "cs_loser", url: "https://checkout.stripe.test/cs_loser" });
         stripe.checkout.sessions.expire.mockResolvedValue({});
-        claim(false);
+        claim(false, "cs_winner");
 
         const response = await handler(post(request));
         expect(response.status).toBe(409);
         expect((await response.json()).code).toBe("CHECKOUT_CONFLICT");
         expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith("cs_loser");
+    });
+
+    test("a simultaneous request that saved this same session first is not a conflict", async () => {
+        paymentRow({ status: "pending", stripe_checkout_session_id: null });
+        admin.rpc.mockResolvedValue({ data: checkoutInfo, error: null });
+        // same idempotency key, so Stripe handed both requests this session
+        stripe.checkout.sessions.create.mockResolvedValue({ id: "cs_shared", url: "https://checkout.stripe.test/cs_shared" });
+        claim(false, "cs_shared");
+
+        const response = await handler(post(request));
+        expect(await response.json()).toEqual({ url: "https://checkout.stripe.test/cs_shared" });
+        expect(stripe.checkout.sessions.expire).not.toHaveBeenCalled();
     });
 
     test("a Stripe or database failure is a 502 with nothing leaked", async () => {

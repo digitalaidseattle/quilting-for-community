@@ -148,23 +148,35 @@ Deno.serve(async (req) => {
         }
 
         // Compare-and-set as a backstop, so two requests can never leave two
-        // live Checkouts that could both be paid. Saves the session if the
-        // payment still has the one this request replaced, or already has this
-        // one (a simultaneous request got the same session from Stripe).
-        const replaced = payment.stripe_checkout_session_id;
-        const { data: claimed, error: claimError } = await admin
+        // live Checkouts that could both be paid: save the session only if the
+        // payment still has the one this request replaced. (PostgREST rejects
+        // an `or` filter on an update, so the "already ours" case is a second
+        // read below.)
+        let claim = admin
             .from("payments")
             .update({ stripe_checkout_session_id: session.id })
             .eq("id", payment.id)
-            .eq("status", "pending")
-            .or(`stripe_checkout_session_id.eq.${session.id},stripe_checkout_session_id.${replaced ? `eq.${replaced}` : "is.null"}`)
-            .select("id");
+            .eq("status", "pending");
+        claim = payment.stripe_checkout_session_id
+            ? claim.eq("stripe_checkout_session_id", payment.stripe_checkout_session_id)
+            : claim.is("stripe_checkout_session_id", null);
+        const { data: claimed, error: claimError } = await claim.select("id");
         if (claimError) throw claimError;
 
         if (!claimed || claimed.length === 0) {
-            // Another request started a different Checkout first. Trying again resumes theirs.
-            await stripe.checkout.sessions.expire(session.id).catch(() => undefined);
-            return json({ error: "Please try again.", code: "CHECKOUT_CONFLICT" }, 409);
+            // A simultaneous request may have got this same session from Stripe
+            // and saved it first. Otherwise another Checkout won: close this one.
+            const { data: now, error: nowError } = await admin
+                .from("payments")
+                .select("stripe_checkout_session_id")
+                .eq("id", payment.id)
+                .maybeSingle();
+            if (nowError) throw nowError;
+            if (now?.stripe_checkout_session_id !== session.id) {
+                // Trying again resumes the other Checkout.
+                await stripe.checkout.sessions.expire(session.id).catch(() => undefined);
+                return json({ error: "Please try again.", code: "CHECKOUT_CONFLICT" }, 409);
+            }
         }
 
         return json({ url: session.url });
