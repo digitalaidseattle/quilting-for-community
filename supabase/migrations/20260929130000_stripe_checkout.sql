@@ -1,5 +1,4 @@
--- Epic 5: Stripe Checkout for the pending payments made by
--- register_for_sessions (20260929120000_paid_registration.sql).
+-- Stripe Checkout for the pending payments made by register_for_sessions.
 --
 -- * Stripe itself is only called from edge functions (the static site never
 --   sees the secret key): create-checkout turns a pending payment into a
@@ -20,7 +19,6 @@ create table public.stripe_webhook_events (
   event_type text not null,
   status text not null default 'pending'
     check (status in ('pending', 'processed', 'failed')),
-  -- why the last attempt failed
   error text,
   created_at timestamptz default now(),
   created_by text,
@@ -122,7 +120,7 @@ begin
     'description', (
       select string_agg(e.name, ', ' order by i.created_at)
       from public.order_items i
-      join public.events e on e.id = i.class_id
+      join public.events e on e.id = i.event_id
       where i.order_id = v_payment.order_id
     ),
     'email', (
@@ -131,7 +129,6 @@ begin
       join public.profiles p on p.id = o.profile_id
       where o.id = v_payment.order_id
     ),
-    -- the person's Stripe customer from an earlier payment, if any
     'customer_id', (
       select prev.provider_customer_id
       from public.orders o

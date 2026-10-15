@@ -2,10 +2,8 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import process from "node:process";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 
-// Covers the database side of orders and paid registration (migrations
-// 20260929110000_orders_schema.sql onward). Stripe itself is only reached from
-// the edge functions, so the service-role functions they call
-// (process_stripe_event, begin_checkout, ...) are called here directly.
+// Covers the database side of orders and paid registration. 
+// Stripe itself is only reached from the edge functions, so the service-role functions they call (process_stripe_event, begin_checkout, ...) are called here directly.
 
 const SUPABASE_URL = "http://localhost:54321";
 
@@ -16,6 +14,7 @@ const anonClient = createClient(SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY
 
 const TEST_PREFIX = "PAYMENTS_TEST_";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const POSTGRES_UNIQUE_VIOLATION = "23505";
 
 function futureIso(daysAhead: number, hoursOffset = 0): string {
     return new Date(Date.now() + daysAhead * DAY_MS + hoursOffset * 60 * 60 * 1000).toISOString();
@@ -131,7 +130,7 @@ async function cleanup(): Promise<void> {
     const { data: events } = await serviceRoleClient.from("events").select("id").ilike("name", `${TEST_PREFIX}%`);
     const eventIds = (events ?? []).map((event) => event.id);
     if (eventIds.length > 0) {
-        const { data: items } = await serviceRoleClient.from("order_items").select("order_id").in("class_id", eventIds);
+        const { data: items } = await serviceRoleClient.from("order_items").select("order_id").in("event_id", eventIds);
         const orderIds = [...new Set((items ?? []).map((i) => i.order_id))];
         const { data: sessions } = await serviceRoleClient.from("event_sessions").select("id").in("event_id", eventIds);
         // registrations and payments point at orders
@@ -182,7 +181,7 @@ describe("orders and paid registration", () => {
 
         const { data: items } = await serviceRoleClient.from("order_items").select("*").eq("order_id", order.id);
         expect(items).toHaveLength(1);
-        expect(items![0]).toMatchObject({ class_id: eventId, amount: 3500 });
+        expect(items![0]).toMatchObject({ event_id: eventId, amount: 3500 });
 
         const payment = await row("payments", data[0].payment_id);
         expect(payment).toMatchObject({
@@ -282,7 +281,7 @@ describe("orders and paid registration", () => {
         const second = await register(anonClient, [partTwo], info, 30);
         expect(code(second.error)).toBe("PAYMENT_PENDING");
 
-        const { count } = await serviceRoleClient.from("order_items").select("id", { count: "exact", head: true }).eq("class_id", eventId);
+        const { count } = await serviceRoleClient.from("order_items").select("id", { count: "exact", head: true }).eq("event_id", eventId);
         expect(count).toBe(1);
     });
 
@@ -299,7 +298,7 @@ describe("orders and paid registration", () => {
         const second = await serviceRoleClient.from("payments").insert({
             order_id: order.id, amount: 3000, expires_at: futureIso(1),
         });
-        expect(second.error?.code).toBe("23505");
+        expect(second.error?.code).toBe(POSTGRES_UNIQUE_VIOLATION);
     });
 
     test("a completed checkout marks the payment succeeded, the order paid, and confirms the registrations", async () => {
@@ -537,5 +536,23 @@ describe("orders and paid registration", () => {
         const unknown = await anonClient.rpc("payment_status", { p_payment_id: crypto.randomUUID() });
         expect(unknown.error).toBeNull();
         expect(unknown.data).toBeNull();
+    });
+
+    test("anon can't read money tables or call the service-role functions", async () => {
+        for (const table of ["orders", "order_items", "payments", "stripe_webhook_events"]) {
+            const { error } = await anonClient.from(table).select("id");
+            expect(error, table).not.toBeNull();
+        }
+        const { sessionId } = await setupEvent();
+        const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
+        const forged = await anonClient.rpc("process_stripe_event", {
+            p_event_id: "evt_test_forged", p_event_type: "checkout.session.completed", p_data: paid(data[0].payment_id),
+        });
+        expect(forged.error).not.toBeNull();
+        const confirm = await anonClient.rpc("confirm_payment", {
+            p_payment_id: data[0].payment_id, p_checkout_session_id: "cs_x", p_payment_intent_id: "pi_x",
+        });
+        expect(confirm.error).not.toBeNull();
+        expect((await row("payments", data[0].payment_id)).status).toBe("pending");
     });
 });

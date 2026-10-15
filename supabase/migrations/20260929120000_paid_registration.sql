@@ -1,18 +1,4 @@
--- Epic 5: paid registration and seat holds, on top of the orders schema
--- (20260929110000_orders_schema.sql).
---
--- * Payment is per class, not per session: one register_for_sessions call makes
---   at most one order covering every session (part) picked in that call, and a
---   later registration for another part of a class the person already paid for
---   is not charged again.
--- * Sliding scale: the participant picks an amount between the event's
---   price_min and price_max. An amount of 0 (allowed only when price_min is 0)
---   makes no order and confirms immediately.
--- * A paid registration starts 'pending' and holds its seat while its payment
---   is pending. Holds that outlive their payment's expires_at stop counting
---   against capacity, and are cleaned up lazily (expire_stale_payments).
--- * Taking the payment (Stripe Checkout) comes in the next migration. Until
---   then nothing marks a payment paid, so a paid registration only lapses.
+-- Paid registration and seat holds.
 
 begin;
 
@@ -235,10 +221,6 @@ revoke execute on function public.registration_result(public.event_registrations
 -- RPC: register_for_sessions. Now takes the chosen amount (dollars) and an
 -- optional request id, and creates the order, its class item and the pending
 -- payment when there is something to pay.
---
--- New error codes (in HINT): SESSION_EVENT_MISMATCH, AMOUNT_OUT_OF_RANGE,
--- PAYMENT_PENDING. Each returned registration carries order_id and payment_id,
--- the same for every row of a paid call and null when nothing was charged.
 -- ---------------------------------------------------------------------------
 
 drop function public.register_for_sessions(uuid[], jsonb, boolean);
@@ -435,7 +417,7 @@ begin
     join public.order_items i on i.order_id = o.id
     where o.profile_id = v_profile.id
       and o.status = 'paid'
-      and i.class_id = v_event.id
+      and i.event_id = v_event.id
       and exists (
         select 1 from public.event_registrations r
         where r.order_id = o.id and r.status = 'confirmed'
@@ -457,7 +439,7 @@ begin
     values (v_profile.id, v_amount_cents, p_request_id)
     returning * into v_order;
 
-    insert into public.order_items (order_id, class_id, amount)
+    insert into public.order_items (order_id, event_id, amount)
     values (v_order.id, v_event.id, v_amount_cents);
 
     insert into public.payments (order_id, type, amount, expires_at)
@@ -544,7 +526,7 @@ grant execute on function public.register_for_sessions(uuid[], jsonb, boolean, n
 -- registration that's awaiting payment (its seat is released when the hold
 -- lapses or they back out of Checkout, see cancel_payment) or one whose
 -- order has been paid (refunds are handled by staff for now). Admins can still
--- cancel. New codes: PAYMENT_PENDING, PAID_REGISTRATION.
+-- cancel.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.cancel_registration(
@@ -642,7 +624,7 @@ as $$
     'event', (
       select jsonb_build_object('id', e.id, 'name', e.name)
       from public.order_items i
-      join public.events e on e.id = i.class_id
+      join public.events e on e.id = i.event_id
       where i.order_id = p.order_id
       order by i.created_at
       limit 1
