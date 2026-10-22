@@ -136,12 +136,15 @@ async function cleanup(): Promise<void> {
         // registrations and payments point at orders
         await serviceRoleClient.from("event_registrations").delete().in("session_id", (sessions ?? []).map((s) => s.id));
         if (orderIds.length > 0) {
+            // history points at payments, and only the service role can delete it
+            const { data: payments } = await serviceRoleClient.from("payments").select("id").in("order_id", orderIds);
+            await serviceRoleClient.from("payment_history").delete().in("payment_id", (payments ?? []).map((p) => p.id));
             await serviceRoleClient.from("payments").delete().in("order_id", orderIds);
             await serviceRoleClient.from("orders").delete().in("id", orderIds);
         }
         await serviceRoleClient.from("events").delete().in("id", eventIds);
     }
-    await serviceRoleClient.from("stripe_webhook_events").delete().like("event_id", "evt_test_%");
+    await serviceRoleClient.from("payment_webhook_events").delete().like("event_id", "evt_test_%");
     const { data: users } = await serviceRoleClient.auth.admin.listUsers({ perPage: 1000 });
     await Promise.all(
         (users?.users ?? [])
@@ -312,8 +315,8 @@ describe("orders and paid registration", () => {
 
         expect(await row("payments", data[0].payment_id)).toMatchObject({
             status: "succeeded",
-            stripe_payment_id: "pi_test_complete",
-            stripe_checkout_session_id: event.checkout_session_id,
+            provider_payment_id: "pi_test_complete",
+            provider_checkout_id: event.checkout_session_id,
             provider_customer_id: "cus_test_123",
         });
         const order = await row("orders", data[0].order_id);
@@ -335,7 +338,7 @@ describe("orders and paid registration", () => {
         expect(second.outcome).toBe("duplicate");
         expect((await row("payments", data[0].payment_id)).paid_at).toBe(paidAt);
 
-        const { data: events } = await serviceRoleClient.from("stripe_webhook_events").select("status, event_type").eq("event_id", first.id);
+        const { data: events } = await serviceRoleClient.from("payment_webhook_events").select("status, event_type").eq("event_id", first.id);
         expect(events).toEqual([{ status: "processed", event_type: "checkout.session.completed" }]);
     });
 
@@ -347,7 +350,7 @@ describe("orders and paid registration", () => {
         const bad = await stripeEvent("checkout.session.completed", { ...paid(data[0].payment_id), payment_id: "not-a-uuid" });
         expect(bad.error).toBeNull();
         expect(bad.outcome).toBe("failed");
-        const { data: failedRow } = await serviceRoleClient.from("stripe_webhook_events").select("status, error").eq("event_id", bad.id).single();
+        const { data: failedRow } = await serviceRoleClient.from("payment_webhook_events").select("status, error").eq("event_id", bad.id).single();
         expect(failedRow!.status).toBe("failed");
         expect(failedRow!.error).toContain("not-a-uuid");
 
@@ -388,7 +391,7 @@ describe("orders and paid registration", () => {
     test("an old checkout session expiring doesn't cancel a payment that moved to a newer session", async () => {
         const { sessionId } = await setupEvent();
         const { data } = await register(anonClient, [sessionId], guest("Gwen", "gwen@example.com"), 30);
-        await serviceRoleClient.from("payments").update({ stripe_checkout_session_id: "cs_test_new" }).eq("id", data[0].payment_id);
+        await serviceRoleClient.from("payments").update({ provider_checkout_id: "cs_test_new" }).eq("id", data[0].payment_id);
 
         await stripeEvent("checkout.session.expired", { payment_id: data[0].payment_id, checkout_session_id: "cs_test_old" });
         expect((await row("payments", data[0].payment_id)).status).toBe("pending");
@@ -538,7 +541,7 @@ describe("orders and paid registration", () => {
     });
 
     test("anon can't read money tables or call the service-role functions", async () => {
-        for (const table of ["orders", "order_items", "payments", "stripe_webhook_events"]) {
+        for (const table of ["orders", "order_items", "payments", "payment_webhook_events"]) {
             const { error } = await anonClient.from(table).select("id");
             expect(error, table).not.toBeNull();
         }

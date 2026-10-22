@@ -19,7 +19,7 @@ const checkoutInfo = {
     status: "pending",
     amount: 3000,
     currency: "usd",
-    stripe_checkout_session_id: null as string | null,
+    provider_checkout_id: null as string | null,
     checkout_expires_at: 1_800_000_000,
     description: "Beginner Quilting",
     email: "gwen@example.com",
@@ -27,7 +27,7 @@ const checkoutInfo = {
 };
 
 /** The payment row the function reads first. Null for a payment that doesn't exist. */
-function paymentRow(row: { status: string; stripe_checkout_session_id: string | null } | null) {
+function paymentRow(row: { status: string; provider_checkout_id: string | null } | null) {
     admin.from.mockReturnValueOnce(fakeQuery({ data: row, error: null }));
 }
 
@@ -39,7 +39,7 @@ function claim(won: boolean, current: string | null = null) {
     const query = fakeQuery({ data: won ? [{ id: PAYMENT_ID }] : [], error: null });
     admin.from.mockReturnValueOnce(query);
     if (!won) {
-        admin.from.mockReturnValueOnce(fakeQuery({ data: { stripe_checkout_session_id: current }, error: null }));
+        admin.from.mockReturnValueOnce(fakeQuery({ data: { provider_checkout_id: current }, error: null }));
     }
     return query;
 }
@@ -90,7 +90,7 @@ describe("create-checkout", () => {
     });
 
     test("a payment that already succeeded says so instead of charging again", async () => {
-        paymentRow({ status: "succeeded", stripe_checkout_session_id: "cs_old" });
+        paymentRow({ status: "succeeded", provider_checkout_id: "cs_old" });
         const response = await handler(post(request));
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({ status: "succeeded" });
@@ -99,7 +99,7 @@ describe("create-checkout", () => {
 
     test("a cancelled, failed or refunded payment can't be paid", async () => {
         for (const status of ["cancelled", "failed", "refunded"]) {
-            paymentRow({ status, stripe_checkout_session_id: null });
+            paymentRow({ status, provider_checkout_id: null });
             const response = await handler(post(request));
             expect(response.status).toBe(410);
             expect((await response.json()).code).toBe("PAYMENT_EXPIRED");
@@ -108,7 +108,7 @@ describe("create-checkout", () => {
     });
 
     test("an open Checkout is resumed rather than replaced", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: "cs_open" });
+        paymentRow({ status: "pending", provider_checkout_id: "cs_open" });
         stripe.checkout.sessions.retrieve.mockResolvedValue({ status: "open", url: "https://checkout.stripe.test/cs_open" });
 
         const response = await handler(post(request));
@@ -119,7 +119,7 @@ describe("create-checkout", () => {
     });
 
     test("a Checkout that was paid but whose webhook hasn't landed is reported as processing", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: "cs_done" });
+        paymentRow({ status: "pending", provider_checkout_id: "cs_done" });
         stripe.checkout.sessions.retrieve.mockResolvedValue({ status: "complete", url: null });
 
         const response = await handler(post(request));
@@ -128,7 +128,7 @@ describe("create-checkout", () => {
     });
 
     test("a first Checkout is created from the database's amount and expiry, and saved on the payment", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: null });
+        paymentRow({ status: "pending", provider_checkout_id: null });
         admin.rpc.mockResolvedValue({ data: checkoutInfo, error: null });
         stripe.checkout.sessions.create.mockResolvedValue({ id: "cs_new", url: "https://checkout.stripe.test/cs_new" });
         const saved = claim(true);
@@ -153,16 +153,16 @@ describe("create-checkout", () => {
         expect(options.idempotencyKey).toBe(`checkout:${PAYMENT_ID}:first:1800000000:email`);
 
         // saved only if the payment is still pending and has no other session
-        expect(saved.update).toHaveBeenCalledWith({ stripe_checkout_session_id: "cs_new" });
+        expect(saved.update).toHaveBeenCalledWith({ provider_checkout_id: "cs_new" });
         expect(saved.eq).toHaveBeenCalledWith("status", "pending");
-        expect(saved.is).toHaveBeenCalledWith("stripe_checkout_session_id", null);
+        expect(saved.is).toHaveBeenCalledWith("provider_checkout_id", null);
     });
 
     test("an expired Checkout is replaced, reusing the person's Stripe customer", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: "cs_expired" });
+        paymentRow({ status: "pending", provider_checkout_id: "cs_expired" });
         stripe.checkout.sessions.retrieve.mockResolvedValue({ status: "expired", url: null });
         admin.rpc.mockResolvedValue({
-            data: { ...checkoutInfo, stripe_checkout_session_id: "cs_expired", customer_id: "cus_123" },
+            data: { ...checkoutInfo, provider_checkout_id: "cs_expired", customer_id: "cus_123" },
             error: null,
         });
         stripe.checkout.sessions.create.mockResolvedValue({ id: "cs_new", url: "https://checkout.stripe.test/cs_new" });
@@ -175,11 +175,11 @@ describe("create-checkout", () => {
         expect(params.customer).toBe("cus_123");
         expect(params.customer_email).toBeUndefined();
         expect(options.idempotencyKey).toBe(`checkout:${PAYMENT_ID}:cs_expired:1800000000:customer`);
-        expect(saved.eq).toHaveBeenCalledWith("stripe_checkout_session_id", "cs_expired");
+        expect(saved.eq).toHaveBeenCalledWith("provider_checkout_id", "cs_expired");
     });
 
     test("a saved customer that no longer exists in Stripe falls back to the person's email", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: null });
+        paymentRow({ status: "pending", provider_checkout_id: null });
         admin.rpc.mockResolvedValue({ data: { ...checkoutInfo, customer_id: "cus_gone" }, error: null });
         stripe.checkout.sessions.create
             .mockRejectedValueOnce(new Stripe.errors.StripeInvalidRequestError({
@@ -196,7 +196,7 @@ describe("create-checkout", () => {
     });
 
     test("a hold that ran out before Checkout could start is reported as closed", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: null });
+        paymentRow({ status: "pending", provider_checkout_id: null });
         // begin_checkout cleaned up the lapsed hold
         admin.rpc.mockResolvedValue({ data: { ...checkoutInfo, status: "cancelled" }, error: null });
 
@@ -206,7 +206,7 @@ describe("create-checkout", () => {
     });
 
     test("losing the race to another request closes this Checkout and asks the person to retry", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: null });
+        paymentRow({ status: "pending", provider_checkout_id: null });
         admin.rpc.mockResolvedValue({ data: checkoutInfo, error: null });
         stripe.checkout.sessions.create.mockResolvedValue({ id: "cs_loser", url: "https://checkout.stripe.test/cs_loser" });
         stripe.checkout.sessions.expire.mockResolvedValue({});
@@ -219,7 +219,7 @@ describe("create-checkout", () => {
     });
 
     test("a simultaneous request that saved this same session first is not a conflict", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: null });
+        paymentRow({ status: "pending", provider_checkout_id: null });
         admin.rpc.mockResolvedValue({ data: checkoutInfo, error: null });
         // same idempotency key, so Stripe handed both requests this session
         stripe.checkout.sessions.create.mockResolvedValue({ id: "cs_shared", url: "https://checkout.stripe.test/cs_shared" });
@@ -231,7 +231,7 @@ describe("create-checkout", () => {
     });
 
     test("a Stripe or database failure is a 502 with nothing leaked", async () => {
-        paymentRow({ status: "pending", stripe_checkout_session_id: null });
+        paymentRow({ status: "pending", provider_checkout_id: null });
         admin.rpc.mockResolvedValue({ data: checkoutInfo, error: null });
         stripe.checkout.sessions.create.mockRejectedValue(new Error("sk_test_secret is invalid"));
 
