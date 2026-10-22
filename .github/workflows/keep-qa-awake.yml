@@ -1,24 +1,26 @@
 name: Keep QA awake
 
-# Supabase Free projects pause after a week with no API requests, and resuming
-# them is a manual click in the dashboard. A twice-weekly request keeps QA up.
+# Supabase Free projects pause after a week without enough database activity,
+# and resuming them is a manual click in the dashboard. A daily query keeps QA
+# up. It has to reach Postgres: /auth/v1/health answers without touching the
+# database, and QA was still paused while that was the request.
 # QA_SUPABASE_URL / QA_SUPABASE_ANON_KEY are repository *variables*, not secrets
 # -- the anon key is public and already ships in the client bundle.
 
 on:
   schedule:
-    - cron: "0 12 * * 1,4"
+    - cron: "0 12 * * *"
   workflow_dispatch: {}
 
 jobs:
   ping:
-    name: Ping the QA project
+    name: Query the QA database
     runs-on: ubuntu-latest
     environment: qa
     steps:
-      - name: Request the QA REST health endpoint
+      - name: Select one row from constants through the REST API
         run: |
-          curl -sSf "$URL/auth/v1/health" -H "apikey: $KEY"
+          curl -sSf "$URL/rest/v1/constants?select=id&limit=1" -H "apikey: $KEY"
         env:
           URL: ${{ vars.QA_SUPABASE_URL }}
           KEY: ${{ vars.QA_SUPABASE_ANON_KEY }}
