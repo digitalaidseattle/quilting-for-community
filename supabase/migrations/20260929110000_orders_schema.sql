@@ -49,17 +49,19 @@ create table public.payments (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete restrict,
   type text not null default 'stripe'
-    check (type in ('cash', 'credit', 'stripe')),
+    check (type in ('cash', 'stripe', 'paypal', 'clover')),
   status text not null default 'pending'
     check (status in ('pending', 'succeeded', 'failed', 'refunded', 'cancelled')),
   amount int not null check (amount > 0),
   currency text not null default 'usd',
-  -- Stripe customer id (cus_...), reused on the person's next checkout
+  -- The provider's ids, whichever provider `type` names:
+  -- the provider's customer id (Stripe cus_...), reused on the person's next checkout
   provider_customer_id text,
-  -- Stripe payment intent id (pi_...), recorded by the webhook on success
-  stripe_payment_id text,
-  stripe_checkout_session_id text unique,
-  -- staff's note for a payment taken outside Stripe (e.g. the Clover receipt number)
+  -- the money movement, recorded on success (Stripe payment intent, PayPal capture, Clover payment)
+  provider_payment_id text,
+  -- the hosted checkout the person is sent to (Stripe Checkout session, PayPal order)
+  provider_checkout_id text unique,
+  -- staff's note for a payment taken in person
   reference text,
   paid_at timestamptz,
   expires_at timestamptz,
@@ -70,7 +72,7 @@ create table public.payments (
 );
 
 create index payments_order_id_idx on public.payments(order_id);
-create index payments_stripe_payment_id_idx on public.payments(stripe_payment_id);
+create index payments_provider_payment_id_idx on public.payments(provider_payment_id);
 create index payments_pending_expiry_idx on public.payments(expires_at) where status = 'pending';
 -- An order has at most one payment in flight.
 create unique index payments_one_pending_per_order_idx

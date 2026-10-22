@@ -67,7 +67,7 @@ export type OrderItem = Entity & {
     amount: number;
 };
 
-export type PaymentType = 'cash' | 'credit' | 'stripe';
+export type PaymentType = 'cash' | 'stripe' | 'paypal' | 'clover';
 export type PaymentStatus = 'pending' | 'succeeded' | 'failed' | 'refunded' | 'cancelled';
 
 export type Payment = Entity & {
@@ -77,9 +77,11 @@ export type Payment = Entity & {
     amount: number;
     currency: string;
     provider_customer_id: string | null;
-    stripe_payment_id: string | null;
-    stripe_checkout_session_id: string | null;
-    /** Staff's note for a payment taken in person (e.g. the Clover receipt number). */
+    /** The money movement: Stripe payment intent, PayPal capture, or Clover payment. */
+    provider_payment_id: string | null;
+    /** The hosted checkout: Stripe Checkout session or PayPal order. */
+    provider_checkout_id: string | null;
+    /** Staff's note for a payment taken in person. */
     reference: string | null;
     paid_at: string | null;
     expires_at: string | null;
@@ -93,12 +95,11 @@ export type PaymentHistory = Entity & {
     from_status: PaymentStatus | null;
     to_status: PaymentStatus | null;
     type: PaymentType;
-    processor_id: string | null;
+    provider_id: string | null;
     amount: number;
-    payment_date: string;
-    /** A person's email, 'stripe-webhook', 'hold-expiry', or a database role. */
+    /** A person's email, a system function's name (e.g. 'stripe-webhook', 'hold-expiry'), or a database role. */
     actor: string;
-    stripe_event_id: string | null;
+    provider_event_id: string | null;
 };
 
 export type Refund = Entity & {
