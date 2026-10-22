@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
         });
         if (error) throw error;
         if (outcome === "failed") {
-            // The reason is saved on the stripe_webhook_events row.
+            // The reason is saved on the payment_webhook_events row.
             console.error(`stripe-webhook: could not apply ${event.type} ${event.id}`);
             return reply({ error: "Handler failed" }, 500);
         }

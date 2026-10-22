@@ -32,7 +32,7 @@ type CheckoutInfo = {
     status: "pending" | "succeeded" | "failed" | "refunded" | "cancelled";
     amount: number;
     currency: string;
-    stripe_checkout_session_id: string | null;
+    provider_checkout_id: string | null;
     checkout_expires_at: number;
     description: string | null;
     email: string | null;
@@ -72,7 +72,7 @@ function createSession(payment: CheckoutInfo, returnUrl: string, useKnownCustome
         idempotencyKey: [
             "checkout",
             payment.id,
-            payment.stripe_checkout_session_id ?? "first",
+            payment.provider_checkout_id ?? "first",
             payment.checkout_expires_at,
             useKnownCustomer && payment.customer_id ? "customer" : "email",
         ].join(":"),
@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     try {
         const { data: current, error } = await admin
             .from("payments")
-            .select("status, stripe_checkout_session_id")
+            .select("status, provider_checkout_id")
             .eq("id", paymentId)
             .maybeSingle();
         if (error) throw error;
@@ -115,8 +115,8 @@ Deno.serve(async (req) => {
         }
 
         // Resume an open Checkout rather than starting a second one.
-        if (current.stripe_checkout_session_id) {
-            const existing = await stripe.checkout.sessions.retrieve(current.stripe_checkout_session_id);
+        if (current.provider_checkout_id) {
+            const existing = await stripe.checkout.sessions.retrieve(current.provider_checkout_id);
             if (existing.status === "open" && existing.url) {
                 return json({ url: existing.url });
             }
@@ -154,12 +154,12 @@ Deno.serve(async (req) => {
         // read below.)
         let claim = admin
             .from("payments")
-            .update({ stripe_checkout_session_id: session.id })
+            .update({ provider_checkout_id: session.id })
             .eq("id", payment.id)
             .eq("status", "pending");
-        claim = payment.stripe_checkout_session_id
-            ? claim.eq("stripe_checkout_session_id", payment.stripe_checkout_session_id)
-            : claim.is("stripe_checkout_session_id", null);
+        claim = payment.provider_checkout_id
+            ? claim.eq("provider_checkout_id", payment.provider_checkout_id)
+            : claim.is("provider_checkout_id", null);
         const { data: claimed, error: claimError } = await claim.select("id");
         if (claimError) throw claimError;
 
@@ -168,11 +168,11 @@ Deno.serve(async (req) => {
             // and saved it first. Otherwise another Checkout won: close this one.
             const { data: now, error: nowError } = await admin
                 .from("payments")
-                .select("stripe_checkout_session_id")
+                .select("provider_checkout_id")
                 .eq("id", payment.id)
                 .maybeSingle();
             if (nowError) throw nowError;
-            if (now?.stripe_checkout_session_id !== session.id) {
+            if (now?.provider_checkout_id !== session.id) {
                 // Trying again resumes the other Checkout.
                 await stripe.checkout.sessions.expire(session.id).catch(() => undefined);
                 return json({ error: "Please try again.", code: "CHECKOUT_CONFLICT" }, 409);

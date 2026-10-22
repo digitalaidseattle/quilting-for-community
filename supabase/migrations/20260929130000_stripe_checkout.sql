@@ -4,18 +4,21 @@
 --   sees the secret key): create-checkout turns a pending payment into a
 --   Checkout session, and stripe-webhook reports how it ended.
 -- * Everything a webhook changes goes through process_stripe_event, which
---   records each Stripe event id once so repeat deliveries are ignored.
+--   records each Stripe event id once (in payment_webhook_events) so repeat
+--   deliveries are ignored.
 -- * The functions here are service-role only.
 
 begin;
 
--- Stripe can deliver the same webhook event more than once. Each event id is
--- recorded here once. A 'processed' event is never applied again. A 'failed'
--- one is retried when Stripe redelivers it.
-create table public.stripe_webhook_events (
+-- A provider can deliver the same webhook event more than once. Each event id
+-- is recorded here once per provider. A 'processed' event is never applied
+-- again. A 'failed' one is retried when the provider redelivers it.
+create table public.payment_webhook_events (
   id uuid primary key default gen_random_uuid(),
-  -- evt_..., from Stripe
-  event_id text not null unique,
+  provider text not null
+    check (provider in ('stripe', 'paypal', 'clover')),
+  -- the provider's event id (Stripe evt_...)
+  event_id text not null,
   event_type text not null,
   status text not null default 'pending'
     check (status in ('pending', 'processed', 'failed')),
@@ -23,20 +26,21 @@ create table public.stripe_webhook_events (
   created_at timestamptz default now(),
   created_by text,
   updated_at timestamptz default now(),
-  updated_by text
+  updated_by text,
+  unique (provider, event_id)
 );
 
-create trigger stripe_webhook_events_set_audit_fields
-  before insert or update on public.stripe_webhook_events
+create trigger payment_webhook_events_set_audit_fields
+  before insert or update on public.payment_webhook_events
   for each row execute function public.set_audit_fields();
 
-alter table public.stripe_webhook_events enable row level security;
+alter table public.payment_webhook_events enable row level security;
 
-revoke all on public.stripe_webhook_events from public, anon, authenticated;
-grant select on public.stripe_webhook_events to authenticated;
-grant select, insert, update, delete on public.stripe_webhook_events to service_role;
+revoke all on public.payment_webhook_events from public, anon, authenticated;
+grant select on public.payment_webhook_events to authenticated;
+grant select, insert, update, delete on public.payment_webhook_events to service_role;
 
-create policy stripe_webhook_events_admin_read on public.stripe_webhook_events
+create policy payment_webhook_events_admin_read on public.payment_webhook_events
   for select to authenticated using (public.is_admin());
 
 -- An order has been paid: mark it and confirm its registrations.
@@ -113,7 +117,7 @@ begin
     'status', v_payment.status,
     'amount', v_payment.amount,
     'currency', v_payment.currency,
-    'stripe_checkout_session_id', v_payment.stripe_checkout_session_id,
+    'provider_checkout_id', v_payment.provider_checkout_id,
     -- Checkout closes 5 minutes before the hold does, so a payment made at the
     -- last second still finds its registration pending.
     'checkout_expires_at', extract(epoch from v_payment.expires_at - interval '5 minutes')::bigint,
@@ -171,8 +175,8 @@ begin
     update public.payments
     set status = 'succeeded',
         paid_at = now(),
-        stripe_checkout_session_id = coalesce(p_checkout_session_id, stripe_checkout_session_id),
-        stripe_payment_id = coalesce(p_payment_intent_id, stripe_payment_id),
+        provider_checkout_id = coalesce(p_checkout_session_id, provider_checkout_id),
+        provider_payment_id = coalesce(p_payment_intent_id, provider_payment_id),
         provider_customer_id = coalesce(p_customer_id, provider_customer_id)
     where id = p_payment_id;
 
@@ -208,7 +212,7 @@ begin
   set status = p_status
   where id = p_payment_id
     and status = 'pending'
-    and (p_checkout_session_id is null or stripe_checkout_session_id = p_checkout_session_id)
+    and (p_checkout_session_id is null or provider_checkout_id = p_checkout_session_id)
   returning order_id into v_order_id;
 
   if found then
@@ -241,13 +245,13 @@ declare
   v_status text;
   v_payment_id uuid;
 begin
-  insert into public.stripe_webhook_events (event_id, event_type)
-  values (p_event_id, p_event_type)
-  on conflict (event_id) do nothing;
+  insert into public.payment_webhook_events (provider, event_id, event_type)
+  values ('stripe', p_event_id, p_event_type)
+  on conflict (provider, event_id) do nothing;
 
   select status into v_status
-  from public.stripe_webhook_events
-  where event_id = p_event_id
+  from public.payment_webhook_events
+  where provider = 'stripe' and event_id = p_event_id
   for update;
 
   if v_status = 'processed' then
@@ -256,7 +260,7 @@ begin
 
   -- for payment_history: what made the changes below, and which event
   perform set_config('app.actor', 'stripe-webhook', true);
-  perform set_config('app.stripe_event_id', p_event_id, true);
+  perform set_config('app.provider_event_id', p_event_id, true);
 
   begin
     v_payment_id := nullif(p_data->>'payment_id', '')::uuid;
@@ -284,15 +288,15 @@ begin
         null;  -- not an event this system acts on
     end case;
   exception when others then
-    update public.stripe_webhook_events
+    update public.payment_webhook_events
     set status = 'failed', error = sqlerrm
-    where event_id = p_event_id;
+    where provider = 'stripe' and event_id = p_event_id;
     return 'failed';
   end;
 
-  update public.stripe_webhook_events
+  update public.payment_webhook_events
   set status = 'processed', error = null
-  where event_id = p_event_id;
+  where provider = 'stripe' and event_id = p_event_id;
 
   return 'processed';
 end;
