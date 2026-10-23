@@ -39,7 +39,7 @@ export type EventSession = Entity & {
 export type RegistrationType = 'participant' | 'volunteer';
 export type RegistrationStatus = 'confirmed' | 'cancelled';
 
-/** One person's registration for one session (see migration 20260901120000_event_registrations.sql). */
+/** One person's registration for one session */
 export type EventRegistration = Entity & {
     session_id: string;
     profile_id: string;
