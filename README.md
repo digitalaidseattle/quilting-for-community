@@ -48,10 +48,10 @@ Pull request previews on Vercel point at the QA database, so a PR that adds a mi
 
 The application is deployed on Vercel.  Pushes to `main` publish the production deployment. Every other branch gets a preview deployment.  Supabase environment variables are configured in the Vercel project: the Production scope points at the production Supabase project and the Preview scope points at QA.
 
-Database migrations are deployed by `.github/workflows/supabase-migrations.yml`:
+Database migrations and edge functions are deployed by `.github/workflows/supabase-migrations.yml`:
 - **pull request** - applies every migration to a throwaway database in the runner and lints the schema.  Nothing hosted is touched.
-- **push to `dev` or `qa`** - `supabase db push` against the QA project.
-- **push to `main`** - `supabase db push` against the production project.
+- **push to `dev` or `qa`** - `supabase db push` and `supabase functions deploy` against the QA project.
+- **push to `main`** - `supabase db push` and `supabase functions deploy` against the production project.
 
 Migrations are forward-only. To undo one, add a new migration.  The workflow reads its credentials from the `qa` and `production` GitHub environments.
 
@@ -63,6 +63,42 @@ Migrations are forward-only. To undo one, add a new migration.  The workflow rea
 | --- | --- | --- |
 | `admin@example.com` | `password123` | `admin` |
 | `member@example.com` | `password123` | `participant` |
+
+### Stripe payments
+Paid class registration uses Stripe Checkout through two edge functions in `supabase/functions/`: `create-checkout` (starts Checkout for a pending payment) and `stripe-webhook` (records the result). The static public site never sees the Stripe secret key.
+
+Before the first deploy to a Supabase project, set its secrets once (use the test-mode key on QA, the live key on production):
+
+```bash
+supabase secrets set --project-ref <project-id> \
+  STRIPE_SECRET_KEY=sk_... \
+  STRIPE_WEBHOOK_SECRET=whsec_... \
+  ALLOWED_RETURN_URLS=https://<public-site-origin>/<base-path>/
+```
+
+`STRIPE_WEBHOOK_SECRET` comes from a webhook endpoint you add in the Stripe dashboard, pointing at `https://<project-id>.supabase.co/functions/v1/stripe-webhook` and sending these events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, and `checkout.session.expired`. `ALLOWED_RETURN_URLS` is a comma-separated list of URL prefixes Stripe may send people back to.
+
+#### Running payments locally
+1. Copy `supabase/functions/.env.example` to `supabase/functions/.env` (gitignored) and fill in a Stripe **test** secret key.
+2. Install the [Stripe CLI](https://docs.stripe.com/stripe-cli) and get a local webhook signing secret for `STRIPE_WEBHOOK_SECRET`:
+   ```bash
+   stripe listen --api-key sk_test_... --print-secret
+   ```
+3. With `supabase start` running, serve the functions and forward Stripe's events to them (two terminals):
+   ```bash
+   mkdir -p supabase/.temp/tmp
+   TMPDIR="$PWD/supabase/.temp/tmp" npx supabase functions serve --env-file supabase/functions/.env
+   stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook \
+     --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired
+   ```
+   The `TMPDIR` override works around Docker Desktop setups that don't share macOS's default temp folder with containers, which makes the edge runtime fail with "failed to determine entrypoint". A folder inside the repo is always shared, since the functions are mounted from it too. `supabase/.temp` is gitignored and excluded from ESLint.
+4. Pay with Stripe's test card `4242 4242 4242 4242`, any future expiry, any CVC.
+
+#### Testing the edge functions
+```bash
+npm run test:functions
+```
+These tests sit next to each function (`supabase/functions/*/index.test.ts`) and run in Node with Stripe and the database replaced by fakes, so they need no Stripe key, no Docker and no running Supabase. The webhook's signature check is exercised for real. The database side of payments is covered by the integration tests.
 
 ## FAQ
 
