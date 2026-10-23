@@ -88,7 +88,7 @@ supabase secrets set --project-ref <project-id> \
    ```bash
    mkdir -p supabase/.temp/tmp
    TMPDIR="$PWD/supabase/.temp/tmp" npx supabase functions serve --env-file supabase/functions/.env
-   stripe listen --api-key sk_test_... --forward-to localhost:54321/functions/v1/stripe-webhook \
+   stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook \
      --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired
    ```
    The `TMPDIR` override works around Docker Desktop setups that don't share macOS's default temp folder with containers, which makes the edge runtime fail with "failed to determine entrypoint". A folder inside the repo is always shared, since the functions are mounted from it too. `supabase/.temp` is gitignored and excluded from ESLint.
