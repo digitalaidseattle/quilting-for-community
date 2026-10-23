@@ -120,6 +120,16 @@ describe("EventsService.save", () => {
         vi.mocked(mockSessions.upsert).mockResolvedValue(session());
     });
 
+    test("sets the price range to the single price", async () => {
+        await service.save(baseEvent({ price_min: 0, price: 30, price_max: 0 }));
+
+        expect(mockEvents.update).toHaveBeenCalledWith('event-1', expect.objectContaining({
+            price_min: 30,
+            price: 30,
+            price_max: 30,
+        }));
+    });
+
     test("cancels every session in the payload when the event is cancelled", async () => {
         const event = baseEvent({
             status: 'cancelled',
