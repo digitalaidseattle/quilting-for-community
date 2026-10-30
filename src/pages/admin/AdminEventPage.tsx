@@ -39,7 +39,7 @@ import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { EventsDao } from "../../services/events/EventsDao";
 import { EventsService, normalizeSessionParts } from "../../services/events/EventsService";
 import { Event, EventInstructor, EventSession, SessionStatus } from "../../services/events/types";
-import { eventFormResolver, MAX_DURATION_MINUTES, MIN_DURATION_MINUTES } from "../../services/events/eventValidation";
+import { eventFormResolver, MAX_DURATION_MINUTES, MAX_SEATS, MIN_DURATION_MINUTES } from "../../services/events/eventValidation";
 import { Profile } from "../../services/members/ProfilesDao";
 import { ProfilesService } from "../../services/members/ProfilesService";
 import {
@@ -399,6 +399,8 @@ export const AdminEventPage = () => {
             }
 
             navigate('/admin/event-management');
+        } catch {
+            notifications.error('The event could not be saved.');
         } finally {
             setLoading(false);
         }
@@ -496,6 +498,8 @@ export const AdminEventPage = () => {
             if (isNew && saved.id) {
                 navigate(`/admin/event-management/${saved.id}`, { replace: true });
             }
+        } catch {
+            notifications.error('The session could not be saved.');
         } finally {
             setLoading(false);
         }
@@ -842,6 +846,7 @@ export const AdminEventPage = () => {
                                         value={field.value}
                                         onChange={field.onChange}
                                         min={1}
+                                        max={MAX_SEATS}
                                         error={Boolean(fieldState.error)}
                                         helperText={fieldState.error?.message}
                                         fullWidth
@@ -1131,8 +1136,13 @@ export const AdminEventPage = () => {
                                     name="max_seats"
                                     control={sessionControl}
                                     rules={{
-                                        validate: (value) =>
-                                            value == null || value >= 1 || 'Max seats must be at least 1',
+                                        validate: (value) => {
+                                            if (value == null) return true;
+                                            if (Number.isNaN(value)) return 'Max seats must be a valid number';
+                                            if (value < 1) return 'Max seats must be at least 1';
+                                            if (value > MAX_SEATS) return `Max seats cannot exceed ${MAX_SEATS.toLocaleString('en-US')}`;
+                                            return true;
+                                        },
                                     }}
                                     render={({ field }) => (
                                         <>
@@ -1154,6 +1164,7 @@ export const AdminEventPage = () => {
                                                     value={field.value}
                                                     onChange={field.onChange}
                                                     min={1}
+                                                    max={MAX_SEATS}
                                                     error={Boolean(sessionMaxSeatsError)}
                                                     helperText={sessionMaxSeatsError}
                                                     sx={{ width: 110 }}

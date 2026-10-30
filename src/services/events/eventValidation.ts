@@ -3,6 +3,7 @@ import { Event } from "./types";
 
 export const MIN_DURATION_MINUTES = 1;
 export const MAX_DURATION_MINUTES = 24 * 60;
+export const MAX_SEATS = 1000;
 
 export type EventFieldErrors = Partial<Record<
     'name' | 'duration' | 'max_seats' | 'volunteer_seat_count' | 'price' | 'sessions',
@@ -35,6 +36,8 @@ export function validateEvent(event: Event): EventFieldErrors {
         errors.max_seats = 'Capacity must be a valid number';
     } else if (!isMissingNumber(event.max_seats) && event.max_seats < 1) {
         errors.max_seats = 'Capacity must be at least 1';
+    } else if (event.max_seats > MAX_SEATS) {
+        errors.max_seats = `Capacity cannot exceed ${MAX_SEATS.toLocaleString('en-US')}`;
     }
 
     if (Number.isNaN(event.volunteer_seat_count)) {

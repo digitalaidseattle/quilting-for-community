@@ -1,5 +1,5 @@
 import { EventsDao } from "./EventsDao";
-import { MAX_DURATION_MINUTES, validateEvent } from "./eventValidation";
+import { MAX_DURATION_MINUTES, MAX_SEATS, validateEvent } from "./eventValidation";
 import { Event, EventSession } from "./types";
 
 function baseEvent(overrides: Partial<Event> = {}): Event {
@@ -82,6 +82,15 @@ describe("validateEvent", () => {
     test("rejects durations over 24 hours", () => {
         expect(validateEvent(baseEvent({ duration: MAX_DURATION_MINUTES + 1 })).duration)
             .toBe("Duration cannot exceed 24 hours (1440 minutes)");
+    });
+
+    test("accepts max seats up to the limit", () => {
+        expect(validateEvent(baseEvent({ max_seats: MAX_SEATS })).max_seats).toBeUndefined();
+    });
+
+    test("rejects max seats over the limit", () => {
+        expect(validateEvent(baseEvent({ max_seats: 9999999999 })).max_seats)
+            .toBe("Capacity cannot exceed 1,000");
     });
 
     test("rejects an event with NaN duration", () => {
