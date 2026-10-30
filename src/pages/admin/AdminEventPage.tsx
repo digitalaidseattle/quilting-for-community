@@ -32,7 +32,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
-import { LoadingContext, QueryModel, useStorageService } from "@digitalaidseattle/core";
+import { LoadingContext, QueryModel, useNotifications, useStorageService } from "@digitalaidseattle/core";
 import { EventCategorySelect } from "../../components/EventCategorySelect";
 import { NumberField } from "../../components/NumberField";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
@@ -135,6 +135,7 @@ export const AdminEventPage = () => {
     const service = EventsService.getInstance();
     const profilesService = ProfilesService.getInstance();
     const storageService = useStorageService();
+    const notifications = useNotifications();
     const { setLoading } = useContext(LoadingContext);
     const navigate = useNavigate();
     const { id } = useParams();
@@ -239,7 +240,9 @@ export const AdminEventPage = () => {
             path.startsWith(`events/${eventId}/`)
             || /^events\/[^/]+$/.test(path);
         if (!owned) return;
-        await storageService.removeFile(path).catch(() => undefined);
+        await storageService.removeFile(path).catch(() => {
+            notifications.error('The event photo could not be removed from storage.');
+        });
     }
 
     useEffect(() => {
