@@ -19,10 +19,10 @@ import {
 
 import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
-import { MockProfilesService } from "../services/members/MockProfilesService";
+import { ProfilesService } from "../services/members/ProfilesService";
 
 export const ProfilePage = () => {
-  const service = MockProfilesService.getInstance();
+  const service = ProfilesService.getInstance();
   const { id } = useParams<{ id: string }>();
   const [profile, setProfile] = useState<Profile>();
 
