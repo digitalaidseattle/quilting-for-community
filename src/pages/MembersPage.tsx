@@ -38,8 +38,10 @@ function createQueryModel(
       value: filterItem.value
     })
   }
-  const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
-  const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
+  const activeSort = sortModel[0];
+  const hasActiveSort = activeSort?.field && (activeSort.sort === 'asc' || activeSort.sort === 'desc');
+  const sortField = hasActiveSort ? activeSort.field : 'email';
+  const sortDirection = hasActiveSort ? activeSort.sort : 'asc';
   return {
     ...paginationModel,
     sortField: sortField,
