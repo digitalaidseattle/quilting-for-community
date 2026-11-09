@@ -23,6 +23,7 @@ import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
 import { ProfilesService } from "../services/members/ProfilesService";
 
+const DEFAULT_SORT = { field: 'email', sort: 'asc' } as const;
 
 function createQueryModel(
   paginationModel: { page: number, pageSize: number },
@@ -40,8 +41,8 @@ function createQueryModel(
   }
   const activeSort = sortModel[0];
   const hasActiveSort = activeSort?.field && (activeSort.sort === 'asc' || activeSort.sort === 'desc');
-  const sortField = hasActiveSort ? activeSort.field : 'email';
-  const sortDirection = hasActiveSort ? activeSort.sort : 'asc';
+  const sortField = hasActiveSort ? activeSort.field : DEFAULT_SORT.field;
+  const sortDirection = hasActiveSort ? activeSort.sort : DEFAULT_SORT.sort;
   return {
     ...paginationModel,
     sortField: sortField,
@@ -59,7 +60,7 @@ export const MembersPage = () => {
   const notifications = useNotifications();
 
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'email', sort: 'asc' }]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([DEFAULT_SORT]);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
 
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
@@ -134,7 +135,9 @@ export const MembersPage = () => {
 
               sortingMode='server'
               sortModel={sortModel}
-              onSortModelChange={setSortModel}
+              onSortModelChange={(nextModel) => {
+                setSortModel(nextModel.length > 0 ? nextModel : [DEFAULT_SORT]);
+              }}
 
               filterMode="server"
               filterModel={filterModel}
