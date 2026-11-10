@@ -11,6 +11,7 @@ export type ProfileLabelSource = Pick<Profile, 'id' | 'name' | 'email' | 'first_
 
 export class ProfilesService {
 
+
     private static instance: ProfilesService;
 
     static getInstance() {
@@ -143,5 +144,91 @@ export class ProfilesService {
     async searchBy(field: string, value: any): Promise<Profile[]> {
         return this.dao.searchBy(field, value);
     }
+
+    async importProfiles(files: File[]): Promise<Profile[]> {
+        const profiles: Profile[] = [];
+        for (const file of files) {
+            const ext = file.name.split('.').pop()?.toLowerCase();
+            switch (ext) {
+                case 'json':
+                    const jsonImporter = new JSONProfileImporter();
+                    const results = await jsonImporter.importProfiles(file);
+                    profiles.push(...results);
+                    break;
+                case 'csv':
+                default:
+                    throw new Error(`File ${file.name} is not a supported format.`);
+            }
+        }
+        return profiles;
+    }
+
+    async validateFiles(files: File[]): Promise<Record<string, string[]>> {
+        const errors: Record<string, string[]> = {};
+        for (const file of files) {
+            const ext = file.name.split('.').pop()?.toLowerCase();
+            switch (ext) {
+                case 'json':
+                    const jsonImporter = new JSONProfileImporter();
+                    const results = await jsonImporter.validateFile(file);
+                    errors[file.name] = results;
+                    break;
+                case 'csv':
+                default:
+                    errors[file.name] = [...(errors[file.name] || []), `File ${file.name} is not a supported format. Only JSON is currently supported.`];
+            }
+        }
+        return errors;
+    }
+
 }
 
+interface ProfileImporter {
+    importProfiles(file: File): Promise<Profile[]>;
+    validateFile(file: File): Promise<string[]>;
+}
+
+/* From Acuity
+{ "clients": 
+ [{
+    "firstName": "Fanae",
+    "lastName": "Aaron",
+    "phone": "+13238428244",
+    "phoneFormatted": "+13238428244",
+    "email": "fanae@mac.com",
+    "timezone": "America/Los_Angeles",
+    "hasAccount": false,
+    "clientId": null,
+    "ecd": "YWN1aXR5OkFDVUlUWV9BRVNfS0VZXzA2MjEyMDIwOlBWNExhT0FnMUIxTVJPbEJWSHJpWFZmQkNYREFpQUcxUHo1eW9jK1NPZ0NKaS8rdzVxQXVza1ZtOWUvSWt1emlCRUF4cXZCdnNGZEhnbDBkZ2N4UkVMb2xvWWV3c3Q2c2VERHlLaW9uU2Y1MTRyS09pcUdkRkpKbFh3PT0%3D",
+    "ecdWithEmail": "YWN1aXR5OkFDVUlUWV9BRVNfS0VZXzA2MjEyMDIwOjRvd3lFOGFmOG1HcGNGaXBJSCtGR1lSOXk2TFZiYXhBSk90aU1zbk9tNVk3VlhPM0Rpb1dLOUs1ZS9ocGlzTHNIbS82Mk1rbk5rUjFBUDJkbG5hOWRLT2NqamdESGJpNzBoeHRlQmVhUnNReXBxQVVRY3F1WGVKU2pZaTlDV0ViV01wME5xeUhYK3cwSXpGT3NaazNXZE09"
+}]
+*/
+class JSONProfileImporter implements ProfileImporter {
+
+    async importProfiles(file: File): Promise<Profile[]> {
+        const profileService = ProfilesService.getInstance();
+        return file.text()
+            .then(text => {
+                const json = JSON.parse(text);
+                json.clients = json.clients || [];
+                const profiles = json.clients.map((client: any) => this.mapJsonToProfile(client));
+                return profileService.batchInsert(profiles);
+            });
+    }
+
+    mapJsonToProfile(json: any): Profile {
+        return {
+            auth_id: null,
+            name: json.firstName + ' ' + json.lastName,
+            first_name: json.firstName,
+            last_name: json.lastName,
+            email: json.email,
+            phone: json.phoneFormatted
+        } as Profile;
+    }
+
+    validateFile(_file: File): Promise<string[]> {
+        return Promise.resolve([]);
+    }
+
+}
