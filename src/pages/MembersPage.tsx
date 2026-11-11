@@ -39,10 +39,8 @@ function createQueryModel(
       value: filterItem.value
     })
   }
-  const activeSort = sortModel[0];
-  const hasActiveSort = activeSort?.field && (activeSort.sort === 'asc' || activeSort.sort === 'desc');
-  const sortField = hasActiveSort ? activeSort.field : DEFAULT_SORT.field;
-  const sortDirection = hasActiveSort ? activeSort.sort : DEFAULT_SORT.sort;
+      const sortField = sortModel && sortModel.length > 0 ? sortModel[0].field : DEFAULT_SORT.field;
+    const sortDirection = sortModel && sortModel.length > 0 ? sortModel[0].sort : DEFAULT_SORT.sort;
   return {
     ...paginationModel,
     sortField: sortField,
