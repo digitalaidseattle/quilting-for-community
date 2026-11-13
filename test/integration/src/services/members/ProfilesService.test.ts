@@ -115,6 +115,7 @@ describe("ProfilesService", () => {
         const { data: stale, error: staleError } = await serviceRoleClient
             .from("profiles")
             .select("id, auth_id")
+            .select("id, auth_id")
             .ilike("email", "PROFILE_SERVICE_TEST_%");
 
         if (staleError) {
@@ -456,7 +457,9 @@ describe("ProfilesService", () => {
             // (auth_id would let an admin backdoor-link a profile; roles is
             // set_user_roles-only), so they're left as their column defaults.
             const profile = await adminProfileService.insert({
-                name: "Login-less Profile",
+                auth_id: null,
+                first_name: "Login-less",
+                last_name: 'Profile',
                 email: `PROFILE_SERVICE_TEST_NOLOGIN_ADMIN_${uniqueSuffix()}@example.com`,
                 phone: "",
                 waiver_accepted: false

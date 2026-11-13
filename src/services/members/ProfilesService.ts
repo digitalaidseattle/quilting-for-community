@@ -26,6 +26,21 @@ export class ProfilesService {
 
     constructor(private dao: ProfilesDao = ProfilesDao.getInstance()) { }
 
+    empty(): Profile {
+        return {
+            id: null,
+            auth_id: null,
+            name: "",
+            email: "",
+            first_name: "",
+            last_name: "",
+            phone: "",
+            roles: [],
+            waiver_accepted: false,
+            status: "active"
+        }
+    }
+
     /** Display label for a profile. Override on a subclass (then `setInstance`) to change it app-wide. */
     profileLabel(profile: ProfileLabelSource): string {
         const name = profile.name?.trim()
@@ -56,8 +71,15 @@ export class ProfilesService {
         return this.dao.getById(id);
     }
 
-    async getByAuthId(authId: Identifier): Promise<Profile | null> {
-        return this.dao.getByAuthId(authId);
+    async getByAuthId(uid: Identifier): Promise<Profile | null> {
+        const matches = await this.dao.findBy('auth_id', uid);
+        if (matches.length === 0) {
+            return null;
+        }
+        if (matches.length === 1) {
+            return matches[0];
+        }
+        throw new Error(`More than one profile found with auth_id= ${uid}`);
     }
 
     async batchInsert(entities: Profile[], opts?: DataAccessOptions<Profile>): Promise<Profile[]> {
@@ -70,8 +92,11 @@ export class ProfilesService {
     async insert(entity: Profile, opts?: DataAccessOptions<Profile>): Promise<Profile> {
         // we have an on_auth_user_created trigger that creates profiles
         // when a user is created.
-
-        return this.dao.insert(entity, opts);
+        const updated: any = {
+            ...entity
+        }
+        delete updated.id;  // let DB do the work; alternatively we could use uuid() here
+        return this.dao.insert(updated, opts);
     }
 
     async update(entityId: Identifier, updatedFields: Partial<Profile>, opts?: DataAccessOptions<Profile>): Promise<Profile> {
@@ -79,7 +104,13 @@ export class ProfilesService {
         // NOTE: email is only actually editable for login-less profiles; for
         // linked profiles the DB silently reverts it (see set_profile_updated_at)
         // since it's meant to mirror auth.users.email via handle_new_user
-        const { id: _id, auth_id: _auth_id, roles: _roles, ...cleanedFields } = updatedFields;
+        const { id: _id,
+            auth_id: _auth_id,
+            roles: _roles,
+            ...cleanedFields
+        } = {
+            ...updatedFields
+        };
 
         return this.dao.update(entityId, cleanedFields, opts);
     }
@@ -104,4 +135,13 @@ export class ProfilesService {
 
         return this.dao.upsert(cleanedProfile, opts);
     }
+
+    async findBy(field: string, value: any): Promise<Profile[]> {
+        return this.dao.findBy(field, value);
+    }
+
+    async searchBy(field: string, value: any): Promise<Profile[]> {
+        return this.dao.searchBy(field, value);
+    }
 }
+
