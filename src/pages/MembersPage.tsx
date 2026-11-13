@@ -7,7 +7,7 @@ import { ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 import { ExportOutlined, FilterOutlined, HomeOutlined, PlusOutlined, TableOutlined } from "@ant-design/icons";
-import { Box, Breadcrumbs, Button, Card, CardContent, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Breadcrumbs, Card, CardContent, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import {
   ColumnsPanelTrigger,
   DataGrid,
@@ -29,7 +29,35 @@ import { DEFAULT_TABLE_PAGE_SIZE } from "../constants/Data";
 import { Labels } from "../constants/Labels";
 import { Profile } from "../services/members/ProfilesDao";
 import { ProfilesService } from "../services/members/ProfilesService";
-import UploadDialog from "../components/UploadDialog";
+
+
+// function createQueryModel(
+//   paginationModel: { page: number, pageSize: number },
+//   sortModel: GridSortModel,
+//   filterModel: GridFilterModel,
+// ): QueryModel {
+//   const filterItems: FilterItem[] = [];
+//   if (filterModel && filterModel.items.length > 0) {
+//     const filterItem = filterModel.items[0];
+//     filterItems.push({
+//       field: filterItem.field,
+//       operator: filterItem.operator,
+//       value: filterItem.value
+//     })
+//   }
+//   const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
+//   const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
+//   return {
+//     ...paginationModel,
+//     sortField: sortField,
+//     sortDirection: sortDirection,
+//     filterModel: {
+//       items: filterItems
+//     }
+//   } as QueryModel;
+// }
+
+// ==============================|| SAMPLE PAGE ||============================== //
 
 declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
@@ -71,8 +99,6 @@ export const MembersPage = () => {
   const [profile, setProfile] = useState<Profile | undefined>();
   const [openProfileDialog, setOpenProfileDialog] = useState<boolean>(false);
 
-  const [openImportDialog, setOpenImportDialog] = useState<boolean>(false);
-
   const columns = [
     {
       field: 'name',
@@ -82,11 +108,6 @@ export const MembersPage = () => {
     {
       field: 'email',
       headerName: Labels.EMAIL,
-      width: 250,
-    },
-    {
-      field: 'phone',
-      headerName: Labels.PHONE,
       width: 250,
     }
   ];
@@ -180,7 +201,6 @@ export const MembersPage = () => {
     console.log('FIXME: ' + search)
   }
 
-
   return (
     <>
       <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
@@ -194,15 +214,9 @@ export const MembersPage = () => {
       <Stack direction="column" spacing={1} >
         <Card>
           <CardContent>
-            <Button variant='outlined' onClick={() => setOpenImportDialog(true)}>Import Members</Button>
-            {openImportDialog &&
-              <UploadDialog
-                title="Import Members"
-                open={openImportDialog}
-                onChange={() => {
-                  setOpenImportDialog(false);
-                }} />
-            }
+            <Typography variant="h5" component="div" gutterBottom>
+              Some kind of upload widget
+            </Typography>
           </CardContent>
         </Card>
         <Card>
