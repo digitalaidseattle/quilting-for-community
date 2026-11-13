@@ -143,5 +143,121 @@ export class ProfilesService {
     async searchBy(field: string, value: any): Promise<Profile[]> {
         return this.dao.searchBy(field, value);
     }
+
+    async importProfiles(files: File[]): Promise<Profile[]> {
+        const profiles: Profile[] = [];
+        for (const file of files) {
+            const ext = file.name.split('.').pop()?.toLowerCase();
+            switch (ext) {
+                case 'json':
+                    const jsonImporter = new JSONProfileImporter();
+                    const results = await jsonImporter.importProfiles(file);
+                    profiles.push(...results);
+                    break;
+                case 'csv':
+                default:
+                    throw new Error(`File ${file.name} is not a supported format.`);
+            }
+        }
+        return profiles;
+    }
+
+    async validateFiles(files: File[]): Promise<Record<string, string[]>> {
+        const errors: Record<string, string[]> = {};
+        for (const file of files) {
+            const ext = file.name.split('.').pop()?.toLowerCase();
+            switch (ext) {
+                case 'json':
+                    const jsonImporter = new JSONProfileImporter();
+                    const results = await jsonImporter.validateFile(file);
+                    errors[file.name] = results;
+                    break;
+                case 'csv':
+                default:
+                    errors[file.name] = [...(errors[file.name] || []), `File ${file.name} is not a supported format. Only JSON is currently supported.`];
+            }
+        }
+        return errors;
+    }
+
 }
 
+interface ProfileImporter {
+    importProfiles(file: File): Promise<Profile[]>;
+    validateFile(file: File): Promise<string[]>;
+}
+
+/* From Acuity
+{ "clients": 
+ [{
+    "firstName": "Babe",
+    "lastName": "Ruth",
+    "phone": "+1234567890",
+    "phoneFormatted": "+1234567890",
+    "email": "babe.ruth@nyy.com",
+    "timezone": "America/Los_Angeles",
+    "hasAccount": false,
+    "clientId": null,
+    "ecd": "xxx",
+    "ecdWithEmail": "yyy
+}]
+*/
+class JSONProfileImporter implements ProfileImporter {
+
+    async importProfiles(file: File): Promise<Profile[]> {
+        const profileService = ProfilesService.getInstance();
+        const text = await file.text();
+        const json = JSON.parse(text);
+        const clients: any[] = json.clients || [];
+        const profiles = clients.map((client: any) => this.mapJsonToProfile(client));
+        const filtered = await this.filterDuplicates(profiles);
+        return filtered.length > 0 ? profileService.batchInsert(filtered) : [];
+    }
+
+    /**
+     * Removes profiles whose email (case-insensitive, trimmed) already exists
+     * in the database, or appears earlier in the same import.
+     * Profiles without an email are kept, since they can't be matched.
+     */
+    async filterDuplicates(profiles: Profile[]): Promise<Profile[]> {
+        const normalize = (email?: string | null) => (email ?? '').trim().toLowerCase();
+
+        // not space conscious, but importer should be done at cutting over from acuity.
+        const existing = await ProfilesService.getInstance().getAll();
+        const seen = new Set(existing.map(p => normalize(p.email)).filter(Boolean));
+
+        return profiles.filter(profile => {
+            const email = normalize(profile.email);
+            if (!email) {
+                return true;
+            }
+            if (seen.has(email)) {
+                return false;
+            }
+            seen.add(email);
+            return true;
+        });
+    }
+
+    mapJsonToProfile(json: any): Profile {
+        return {
+            auth_id: null,
+            name: json.firstName + ' ' + json.lastName,
+            first_name: json.firstName,
+            last_name: json.lastName,
+            email: json.email,
+            phone: json.phone
+        } as Profile;
+    }
+
+    async validateFile(file: File): Promise<string[]> {
+        try {
+            const text = await file.text();
+            JSON.parse(text);
+            return [];
+        } catch (error) {
+            return ['File is not in proper JSON format']
+        }
+    }
+
+}
