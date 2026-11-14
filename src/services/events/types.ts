@@ -105,7 +105,7 @@ export type PaymentHistory = Entity & {
 export type Refund = Entity & {
     payment_id: string;
     amount: number;
-    stripe_refund_id: string;
+    provider_refund_id: string;
     status: string;
     reason: string | null;
 };
