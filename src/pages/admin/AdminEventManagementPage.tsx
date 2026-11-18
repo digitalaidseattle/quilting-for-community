@@ -17,7 +17,7 @@ import {
 import { DataGrid, GridSortModel } from "@mui/x-data-grid";
 import dayjs from "dayjs";
 import { ConfirmationDialog } from "@digitalaidseattle/mui";
-import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useStorageService } from "@digitalaidseattle/core";
+import { FilterItem, LoadingContext, PageInfo, QueryModel, RefreshContext, useNotifications, useStorageService } from "@digitalaidseattle/core";
 import { DEFAULT_TABLE_PAGE_SIZE } from "../../constants/Data";
 import { TimezoneSelect } from "../../components/TimezoneSelect";
 import { useEventCategoryOptions } from "../../hooks/useEventCategoryOptions";
@@ -48,6 +48,7 @@ function searchFilterItems(search: string): FilterItem[] {
 export const AdminEventManagementPage = () => {
     const service = EventsService.getInstance();
     const storageService = useStorageService();
+    const notifications = useNotifications();
     const { setLoading } = useContext(LoadingContext);
     const { refresh } = useContext(RefreshContext);
     const navigate = useNavigate();
@@ -167,7 +168,9 @@ export const AdminEventManagementPage = () => {
             const photoPath = eventToDelete.photo_path;
             await service.delete(eventId);
             if (storageService && photoPath && isOwnedEventPhotoPath(photoPath, eventId)) {
-                await storageService.removeFile(photoPath).catch(() => undefined);
+                await storageService.removeFile(photoPath).catch(() => {
+                    notifications.error('Event deleted, but its photo could not be removed from storage.');
+                });
             }
             setEventToDelete(null);
             refetch();
