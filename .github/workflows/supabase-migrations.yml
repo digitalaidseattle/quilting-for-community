@@ -33,7 +33,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.1.0
 
       # Applies every migration to an empty Postgres, so a migration that only
       # works against an already-migrated database fails here instead of in QA.
@@ -59,7 +59,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.1.0
 
       - name: Link Supabase project
         run: supabase link --project-ref "${{ secrets.QA_PROJECT_ID }}"
@@ -86,7 +86,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.1.0
 
       - name: Link Supabase project
         run: supabase link --project-ref "${{ secrets.PRODUCTION_PROJECT_ID }}"
