@@ -99,6 +99,9 @@ export class EventsService {
         const { event_sessions, ...fields } = event;
         const payload = {
             ...fields,
+            // There's one price field for now but min/max can be added in the future.
+            price_min: fields.price,
+            price_max: fields.price,
             search_key: buildEventSearchKey(fields),
         };
         const saved = event.id
