@@ -31,6 +31,10 @@ import { Profile } from "../services/members/ProfilesDao";
 import { ProfilesService } from "../services/members/ProfilesService";
 import UploadDialog from "../components/UploadDialog";
 
+const DEFAULT_SORT = { field: 'email', sort: 'asc' } as const;
+
+// ==============================|| SAMPLE PAGE ||============================== //
+
 declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     tools?: ReactNode;
@@ -63,7 +67,7 @@ export const MembersPage = () => {
 
   const apiRef = useGridApiRef();
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: DEFAULT_TABLE_PAGE_SIZE });
-  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'email', sort: 'asc' }]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([DEFAULT_SORT]);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
 
   const [pageInfo, setPageInfo] = useState<PageInfo<Profile>>({ rows: [], totalRowCount: 0 });
@@ -106,8 +110,8 @@ export const MembersPage = () => {
         value: filterItem.value
       })
     }
-    const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : '';
-    const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : '';
+    const sortField = sortModel && sortModel.length > 0 ? sortModel![0].field : DEFAULT_SORT.field;
+    const sortDirection = sortModel && sortModel.length > 0 ? sortModel![0].sort : DEFAULT_SORT.sort;
     return {
       ...paginationModel,
       sortField: sortField,
@@ -220,7 +224,9 @@ export const MembersPage = () => {
 
               sortingMode='server'
               sortModel={sortModel}
-              onSortModelChange={setSortModel}
+              onSortModelChange={(nextModel) => {
+                setSortModel(nextModel.length > 0 ? nextModel : [DEFAULT_SORT]);
+              }}
 
               filterMode="server"
               filterModel={filterModel}
